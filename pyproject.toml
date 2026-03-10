@@ -1,0 +1,19 @@
+[project]
+name = "wow-mcp"
+version = "0.1.0"
+description = "MCP server for controlling World of Warcraft via ClaudeBot addon"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp[cli]>=1.0.0",
+    "pynput>=1.7.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+wow-mcp = "mcp_server.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mcp_server"]
