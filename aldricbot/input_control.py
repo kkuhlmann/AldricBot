@@ -68,24 +68,6 @@ def _send_reload_sync() -> None:
     _keyboard.release(Key.enter)
 
 
-async def press_key_for_duration(key: str, duration: float) -> None:
-    """Hold a key for the given duration (seconds).
-
-    Args:
-        key: Single character key (e.g. 'w', 'a', 's', 'd').
-        duration: How long to hold the key in seconds.
-    """
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, _press_key_sync, key, duration)
-
-
-def _press_key_sync(key: str, duration: float) -> None:
-    _activate_wow_window()
-    _keyboard.press(key)
-    time.sleep(duration)
-    _keyboard.release(key)
-
-
 async def tap_key_async(key: str) -> None:
     """Tap a key once (press and release).
 
@@ -104,3 +86,28 @@ def _tap_key_sync(key: str) -> None:
     else:
         _keyboard.press(key)
         _keyboard.release(key)
+
+
+async def send_chat_command(text: str) -> None:
+    """Type a slash command directly into WoW's chat box and send it.
+
+    Opens chat with Enter, types the text, then presses Enter to send.
+    This bypasses SavedVariables entirely, avoiding the /reload overwrite race.
+    """
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _send_chat_command_sync, text)
+
+
+def _send_chat_command_sync(text: str) -> None:
+    _activate_wow_window()
+    # Open chat
+    _keyboard.press(Key.enter)
+    _keyboard.release(Key.enter)
+    time.sleep(_CHAT_OPEN_DELAY)
+    # Type the command
+    _type_string(text)
+    time.sleep(_KEY_TAP_DELAY)
+    # Send
+    _keyboard.press(Key.enter)
+    _keyboard.release(Key.enter)
+    time.sleep(0.1)  # brief pause before next command

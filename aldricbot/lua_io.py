@@ -1,21 +1,14 @@
-"""Pure-Python Lua SavedVariables parser and serializer.
+"""Pure-Python Lua SavedVariables parser.
 
 Handles the subset of Lua used in WoW SavedVariables files:
   - nil, true, false, numbers, strings (with escape sequences)
   - tables (both array-style and key-value)
   - single-line (--) and block (--[[ ]]) comments
   - trailing commas
-
-This is the primary communication layer between the MCP server and the
-WoW addon.  The MCP server reads game state and writes commands by
-manipulating the SavedVariables file on disk; WoW picks up changes on
-each /reload.
 """
 
 from __future__ import annotations
 
-import json
-import os
 import re
 from pathlib import Path
 from typing import Any
@@ -238,59 +231,7 @@ def parse_saved_variables(text: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Python → Lua serializer
-# ---------------------------------------------------------------------------
-
-
-def to_lua(value: Any, indent: str = "  ", depth: int = 0) -> str:
-    """Serialize a Python value to a Lua literal string."""
-    if value is None:
-        return "nil"
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, float):
-        return str(value)
-    if isinstance(value, str):
-        escaped = (
-            value.replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-            .replace("\t", "\\t")
-        )
-        return f'"{escaped}"'
-    if isinstance(value, list):
-        if not value:
-            return "{}"
-        pad = indent * (depth + 1)
-        close = indent * depth
-        items = [f"{pad}{to_lua(v, indent, depth + 1)}" for v in value]
-        return "{\n" + ",\n".join(items) + ",\n" + close + "}"
-    if isinstance(value, dict):
-        if not value:
-            return "{}"
-        pad = indent * (depth + 1)
-        close = indent * depth
-        items = []
-        for k, v in value.items():
-            lua_key = k if isinstance(k, str) and _SIMPLE_KEY.fullmatch(k) else f'["{k}"]'
-            items.append(f"{pad}{lua_key} = {to_lua(v, indent, depth + 1)}")
-        return "{\n" + ",\n".join(items) + ",\n" + close + "}"
-
-    return f'"{value}"'
-
-
-def serialize_saved_variables(variables: dict[str, Any]) -> str:
-    """Serialize a dict of globals into a WoW SavedVariables file."""
-    lines = []
-    for name, value in variables.items():
-        lines.append(f"{name} = {to_lua(value)}")
-    return "\n".join(lines) + "\n"
-
-
-# ---------------------------------------------------------------------------
-# File I/O with atomic write
+# File I/O
 # ---------------------------------------------------------------------------
 
 
@@ -298,11 +239,3 @@ def read_saved_variables(path: Path) -> dict[str, Any]:
     """Read and parse a SavedVariables file."""
     text = path.read_text(encoding="utf-8")
     return parse_saved_variables(text)
-
-
-def write_saved_variables(path: Path, variables: dict[str, Any]) -> None:
-    """Atomically write a SavedVariables file."""
-    content = serialize_saved_variables(variables)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(content, encoding="utf-8")
-    os.replace(tmp, path)
