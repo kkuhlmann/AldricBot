@@ -1,8 +1,8 @@
 ## Interface: 30300
-## Title: ClaudeBot
+## Title: AldricBotAddon
 ## Notes: Exports game state for Claude AI control via SavedVariables
 ## Author: You
-## Version: 2.0
-## SavedVariables: ClaudeBotDB
+## Version: 1.0.0
+## SavedVariables: AldricBotAddonDB
 
-ClaudeBot.lua
+AldricBotAddon.lua

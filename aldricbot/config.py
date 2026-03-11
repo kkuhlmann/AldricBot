@@ -9,7 +9,7 @@ WOW_ACCOUNT_NAME: str = os.environ.get("WOW_ACCOUNT_NAME", "")
 
 
 def saved_variables_path() -> Path:
-    """Return the path to ClaudeBot's SavedVariables file."""
+    """Return the path to AldricBotAddon's SavedVariables file."""
     if not WOW_INSTALL_PATH:
         raise RuntimeError("WOW_INSTALL_PATH environment variable is not set")
     if not WOW_ACCOUNT_NAME:
@@ -20,5 +20,5 @@ def saved_variables_path() -> Path:
         / "Account"
         / WOW_ACCOUNT_NAME
         / "SavedVariables"
-        / "ClaudeBot.lua"
+        / "AldricBotAddon.lua"
     )

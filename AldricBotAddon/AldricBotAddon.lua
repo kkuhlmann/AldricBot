@@ -1,10 +1,10 @@
--- ClaudeBot.lua  v3.0
+-- AldricBotAddon.lua  v1.0.0
 -- Guild chat RP bot for Claude AI
 -- Communication via SavedVariables file I/O (synced on each /reload)
 
-ClaudeBotDB = ClaudeBotDB or {}
+AldricBotAddonDB = AldricBotAddonDB or {}
 
-local ClaudeBot = CreateFrame("Frame", "ClaudeBotFrame", UIParent)
+local AldricBotAddon = CreateFrame("Frame", "AldricBotAddonFrame", UIParent)
 local updateInterval = 1.0  -- seconds between state updates
 local timeSinceLastUpdate = 0
 
@@ -16,15 +16,32 @@ local timeSinceLastUpdate = 0
 local MESSAGE_BUFFER_SIZE = 30
 local messageBuffer = {}
 
-local function AddMessage(msgType, text)
-    table.insert(messageBuffer, {
+local function AddMessage(msgType, text, senderZone)
+    local entry = {
         type = msgType,
         text = text,
         time = GetTime(),
-    })
+    }
+    if senderZone and senderZone ~= "" then
+        entry.senderZone = senderZone
+    end
+    table.insert(messageBuffer, entry)
     while #messageBuffer > MESSAGE_BUFFER_SIZE do
         table.remove(messageBuffer, 1)
     end
+    -- Persist so messages survive /reload
+    AldricBotAddonDB.messageHistory = messageBuffer
+end
+
+local function GetGuildMemberZone(name)
+    if not IsInGuild() then return nil end
+    for i = 1, GetNumGuildMembers() do
+        local memberName, _, _, _, _, zone = GetGuildRosterInfo(i)
+        if memberName == name then
+            return zone
+        end
+    end
+    return nil
 end
 
 -- ============================================================
@@ -101,10 +118,10 @@ local function ExecuteCommand(cmd)
 
     if cmd.action == "run_macro" and cmd.text then
         RunMacroText(cmd.text)
-        ClaudeBot:Print("Ran macro: " .. cmd.text)
+        AldricBotAddon:Print("Ran macro: " .. cmd.text)
         return "ok"
     else
-        ClaudeBot:Print("Unknown command: " .. tostring(cmd.action))
+        AldricBotAddon:Print("Unknown command: " .. tostring(cmd.action))
         return "unknown_action"
     end
 end
@@ -120,6 +137,9 @@ eventFrame:RegisterEvent("CHAT_MSG_SYSTEM")
 eventFrame:RegisterEvent("CHAT_MSG_WHISPER")
 eventFrame:RegisterEvent("CHAT_MSG_GUILD")
 eventFrame:RegisterEvent("CHAT_MSG_PARTY")
+eventFrame:RegisterEvent("CHAT_MSG_PARTY_LEADER")
+eventFrame:RegisterEvent("CHAT_MSG_RAID")
+eventFrame:RegisterEvent("CHAT_MSG_RAID_LEADER")
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "UI_ERROR_MESSAGE" then
@@ -137,19 +157,29 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "CHAT_MSG_WHISPER" then
         local msg, sender = ...
         if msg then
-            AddMessage("whisper", sender .. ": " .. msg)
+            local senderZone = GetGuildMemberZone(sender)
+            AddMessage("whisper", sender .. ": " .. msg, senderZone)
         end
 
     elseif event == "CHAT_MSG_GUILD" then
         local msg, sender = ...
         if msg and sender and msg:lower():find("^hey aldric") then
-            AddMessage("guild", sender .. ": " .. msg)
+            local senderZone = GetGuildMemberZone(sender)
+            AddMessage("guild", sender .. ": " .. msg, senderZone)
         end
 
-    elseif event == "CHAT_MSG_PARTY" then
+    elseif event == "CHAT_MSG_PARTY" or event == "CHAT_MSG_PARTY_LEADER" then
         local msg, sender = ...
         if msg and sender and msg:lower():find("^hey aldric") then
-            AddMessage("party", sender .. ": " .. msg)
+            local senderZone = GetGuildMemberZone(sender)
+            AddMessage("party", sender .. ": " .. msg, senderZone)
+        end
+
+    elseif event == "CHAT_MSG_RAID" or event == "CHAT_MSG_RAID_LEADER" then
+        local msg, sender = ...
+        if msg and sender and msg:lower():find("^hey aldric") then
+            local senderZone = GetGuildMemberZone(sender)
+            AddMessage("raid", sender .. ": " .. msg, senderZone)
         end
     end
 end)
@@ -158,40 +188,40 @@ end)
 -- MAIN UPDATE LOOP
 -- ============================================================
 
-ClaudeBot:SetScript("OnUpdate", function(self, elapsed)
+AldricBotAddon:SetScript("OnUpdate", function(self, elapsed)
     timeSinceLastUpdate = timeSinceLastUpdate + elapsed
     if timeSinceLastUpdate < updateInterval then return end
     timeSinceLastUpdate = 0
 
     local state = CollectState()
-    ClaudeBotDB.lastState = toJSON(state)
-    ClaudeBotDB.lastStateTime = state.timestamp
+    AldricBotAddonDB.lastState = toJSON(state)
+    AldricBotAddonDB.lastStateTime = state.timestamp
 end)
 
 -- ============================================================
 -- SLASH COMMANDS
 -- ============================================================
 
-SLASH_CLAUDEBOT1 = "/cb"
-SLASH_CLAUDEBOT2 = "/claudebot"
+SLASH_ALDRICBOTADDON1 = "/ab"
+SLASH_ALDRICBOTADDON2 = "/aldricbot"
 
-SlashCmdList["CLAUDEBOT"] = function(msg)
+SlashCmdList["ALDRICBOTADDON"] = function(msg)
     local cmd = msg:match("^(%S+)") or ""
     cmd = cmd:lower()
 
     if cmd == "status" or cmd == "" then
-        ClaudeBot:Print("ClaudeBot v3.0 - Chat Bot Mode")
-        if ClaudeBotDB.commandQueue then
-            ClaudeBot:Print("Command queue: " .. #ClaudeBotDB.commandQueue .. " commands")
+        AldricBotAddon:Print("AldricBotAddon v1.0.0 - Chat Bot Mode")
+        if AldricBotAddonDB.commandQueue then
+            AldricBotAddon:Print("Command queue: " .. #AldricBotAddonDB.commandQueue .. " commands")
         end
-        ClaudeBot:Print("Messages buffered: " .. #messageBuffer)
+        AldricBotAddon:Print("Messages buffered: " .. #messageBuffer)
 
     elseif cmd == "help" then
-        ClaudeBot:Print("ClaudeBot v3.0 Commands:")
-        ClaudeBot:Print("/cb status - show bot status")
-        ClaudeBot:Print("/cb help - show this help")
+        AldricBotAddon:Print("AldricBotAddon v1.0.0 Commands:")
+        AldricBotAddon:Print("/ab status - show bot status")
+        AldricBotAddon:Print("/ab help - show this help")
     else
-        ClaudeBot:Print("Unknown command. Try /cb help")
+        AldricBotAddon:Print("Unknown command. Try /ab help")
     end
 end
 
@@ -202,17 +232,30 @@ end
 local initFrame = CreateFrame("Frame")
 initFrame:RegisterEvent("ADDON_LOADED")
 initFrame:SetScript("OnEvent", function(self, event, arg1)
-    if event == "ADDON_LOADED" and arg1 == "ClaudeBot" then
-        ClaudeBotDB = ClaudeBotDB or {}
+    if event == "ADDON_LOADED" and arg1 == "AldricBotAddon" then
+        AldricBotAddonDB = AldricBotAddonDB or {}
+
+        -- Restore messages captured before the last /reload, pruning stale ones
+        if AldricBotAddonDB.messageHistory then
+            local now = GetTime()
+            local fresh = {}
+            for _, msg in ipairs(AldricBotAddonDB.messageHistory) do
+                if now - msg.time < 60 then
+                    table.insert(fresh, msg)
+                end
+            end
+            messageBuffer = fresh
+            AldricBotAddonDB.messageHistory = messageBuffer
+        end
 
         -- Process command queue (batch execution)
-        if ClaudeBotDB.commandQueue and #ClaudeBotDB.commandQueue > 0 then
-            ClaudeBotDB.commandResults = {}
-            ClaudeBotDB.queueComplete = false
+        if AldricBotAddonDB.commandQueue and #AldricBotAddonDB.commandQueue > 0 then
+            AldricBotAddonDB.commandResults = {}
+            AldricBotAddonDB.queueComplete = false
 
-            for i, cmd in ipairs(ClaudeBotDB.commandQueue) do
+            for i, cmd in ipairs(AldricBotAddonDB.commandQueue) do
                 local result = ExecuteCommand(cmd)
-                table.insert(ClaudeBotDB.commandResults, {
+                table.insert(AldricBotAddonDB.commandResults, {
                     index = i,
                     action = cmd.action,
                     result = result,
@@ -220,21 +263,17 @@ initFrame:SetScript("OnEvent", function(self, event, arg1)
                 })
             end
 
-            ClaudeBotDB.queueComplete = true
-            ClaudeBotDB.commandQueue = nil
-            ClaudeBot:Print("Queue complete: " .. #ClaudeBotDB.commandResults .. " commands executed")
+            AldricBotAddonDB.queueComplete = true
+            AldricBotAddonDB.commandQueue = nil
+            AldricBotAddon:Print("Queue complete: " .. #AldricBotAddonDB.commandResults .. " commands executed")
 
-        -- Single pending command (backward compat)
-        elseif ClaudeBotDB.pendingCommand then
-            local result = ExecuteCommand(ClaudeBotDB.pendingCommand)
-            ClaudeBotDB.lastCommandResult = {
-                action = ClaudeBotDB.pendingCommand.action,
-                result = result,
-                timestamp = GetTime(),
-            }
-            ClaudeBotDB.pendingCommand = nil
         end
 
-        ClaudeBot:Print("ClaudeBot v3.0 loaded! Chat bot mode. Type /cb help.")
+        -- Request fresh guild roster data for sender zone lookups
+        if IsInGuild() then
+            GuildRoster()
+        end
+
+        AldricBotAddon:Print("AldricBotAddon v1.0.0 loaded! Chat bot mode. Type /ab help.")
     end
 end)

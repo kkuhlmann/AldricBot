@@ -17,10 +17,10 @@ A WoW addon captures guild chat, party chat, and whispers via SavedVariables. A 
 
 ### Install the Addon
 
-Copy the `ClaudeBot/` folder into your WoW addons directory:
+Copy the `AldricBotAddon/` folder into your WoW addons directory:
 
 ```
-cp -r ClaudeBot/ /path/to/WoW/Interface/AddOns/
+cp -r AldricBotAddon/ /path/to/WoW/Interface/AddOns/
 ```
 
 ### Install Python Dependencies
@@ -39,13 +39,15 @@ The daemon will:
 - Reload the WoW UI every ~2.5 seconds to read fresh state
 - Detect messages directed at Aldric (guild/party: "Hey Aldric ...", whispers: any)
 - Spawn Claude to generate an in-character response (with web search for mechanics questions)
-- Maintain conversation context across messages (resets after 3 hours by default)
+- Maintain conversation context across messages (resets after 24 hours by default)
 - Type the response into WoW chat
-- Jump every ~5 minutes to prevent AFK
+- Perform idle emotes every 8–12 minutes for immersion
+- Send proactive RP messages to guild chat every 2–4 hours when idle
+- Sit/stand every ~5 minutes to prevent AFK
 
 Optional flags:
 - `--model {opus,sonnet,haiku}` — choose Claude model (or set `ALDRICBOT_MODEL`)
-- `--session-ttl N` — hours before conversation context resets (default: 3, or set `ALDRICBOT_SESSION_TTL`)
+- `--session-ttl N` — hours before conversation context resets (default: 24, or set `ALDRICBOT_SESSION_TTL`)
 
 ### Stop the Daemon
 
@@ -56,9 +58,9 @@ kill $(cat ~/.aldricbot/daemon.lock)
 ## Project Structure
 
 ```
-ClaudeBot/            WoW addon (copy into Interface/AddOns/)
-  ClaudeBot.toc       Addon manifest
-  ClaudeBot.lua       Message capture, state export, command execution
+AldricBotAddon/       WoW addon (copy into Interface/AddOns/)
+  AldricBotAddon.toc  Addon manifest
+  AldricBotAddon.lua  Message capture, state export, command execution
 aldricbot/            Python package
   config.py           Environment config and SavedVariables path
   input_control.py    Keyboard simulation (pynput)
