@@ -16,14 +16,19 @@ local timeSinceLastUpdate = 0
 local MESSAGE_BUFFER_SIZE = 30
 local messageBuffer = {}
 
-local function AddMessage(msgType, text, senderZone)
+local function AddMessage(msgType, text, senderInfo)
     local entry = {
         type = msgType,
         text = text,
         time = GetTime(),
     }
-    if senderZone and senderZone ~= "" then
-        entry.senderZone = senderZone
+    if senderInfo then
+        if senderInfo.zone and senderInfo.zone ~= "" then entry.senderZone = senderInfo.zone end
+        if senderInfo.class and senderInfo.class ~= "" then entry.senderClass = senderInfo.class end
+        if senderInfo.level then entry.senderLevel = senderInfo.level end
+        if senderInfo.rank and senderInfo.rank ~= "" then entry.senderRank = senderInfo.rank end
+        if senderInfo.note and senderInfo.note ~= "" then entry.senderNote = senderInfo.note end
+        if senderInfo.officerNote and senderInfo.officerNote ~= "" then entry.senderOfficerNote = senderInfo.officerNote end
     end
     table.insert(messageBuffer, entry)
     while #messageBuffer > MESSAGE_BUFFER_SIZE do
@@ -33,12 +38,19 @@ local function AddMessage(msgType, text, senderZone)
     AldricBotAddonDB.messageHistory = messageBuffer
 end
 
-local function GetGuildMemberZone(name)
+local function GetGuildMemberInfo(name)
     if not IsInGuild() then return nil end
     for i = 1, GetNumGuildMembers() do
-        local memberName, _, _, _, _, zone = GetGuildRosterInfo(i)
+        local memberName, rank, _, level, class, zone, note, officernote = GetGuildRosterInfo(i)
         if memberName == name then
-            return zone
+            return {
+                zone = zone,
+                class = class,
+                level = level,
+                rank = rank,
+                note = note,
+                officerNote = officernote,
+            }
         end
     end
     return nil
@@ -140,6 +152,7 @@ eventFrame:RegisterEvent("CHAT_MSG_PARTY")
 eventFrame:RegisterEvent("CHAT_MSG_PARTY_LEADER")
 eventFrame:RegisterEvent("CHAT_MSG_RAID")
 eventFrame:RegisterEvent("CHAT_MSG_RAID_LEADER")
+eventFrame:RegisterEvent("CHAT_MSG_ACHIEVEMENT")
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "UI_ERROR_MESSAGE" then
@@ -151,35 +164,59 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "CHAT_MSG_SYSTEM" then
         local msg = ...
         if msg then
-            AddMessage("system", msg)
+            local loginName = msg:match("^(%S+) has come online%.$")
+            if loginName then
+                local senderInfo = GetGuildMemberInfo(loginName)
+                if senderInfo then
+                    AddMessage("login", loginName, senderInfo)
+                end
+            else
+                local lvlName, lvlNum = msg:match("^(%S+) has reached level (%d+)!")
+                if lvlName then
+                    local senderInfo = GetGuildMemberInfo(lvlName)
+                    AddMessage("levelup", lvlName .. ":" .. lvlNum, senderInfo)
+                else
+                    AddMessage("system", msg)
+                end
+            end
+        end
+
+    elseif event == "CHAT_MSG_ACHIEVEMENT" then
+        local msg, sender = ...
+        if sender then
+            local senderInfo = GetGuildMemberInfo(sender)
+            if senderInfo then
+                local clean = msg and msg:gsub("|H.-|h(.-)|h", "%1") or "an achievement"
+                AddMessage("achievement", sender .. ": " .. clean, senderInfo)
+            end
         end
 
     elseif event == "CHAT_MSG_WHISPER" then
         local msg, sender = ...
         if msg then
-            local senderZone = GetGuildMemberZone(sender)
-            AddMessage("whisper", sender .. ": " .. msg, senderZone)
+            local senderInfo = GetGuildMemberInfo(sender)
+            AddMessage("whisper", sender .. ": " .. msg, senderInfo)
         end
 
     elseif event == "CHAT_MSG_GUILD" then
         local msg, sender = ...
         if msg and sender and msg:lower():find("^hey aldric") then
-            local senderZone = GetGuildMemberZone(sender)
-            AddMessage("guild", sender .. ": " .. msg, senderZone)
+            local senderInfo = GetGuildMemberInfo(sender)
+            AddMessage("guild", sender .. ": " .. msg, senderInfo)
         end
 
     elseif event == "CHAT_MSG_PARTY" or event == "CHAT_MSG_PARTY_LEADER" then
         local msg, sender = ...
         if msg and sender and msg:lower():find("^hey aldric") then
-            local senderZone = GetGuildMemberZone(sender)
-            AddMessage("party", sender .. ": " .. msg, senderZone)
+            local senderInfo = GetGuildMemberInfo(sender)
+            AddMessage("party", sender .. ": " .. msg, senderInfo)
         end
 
     elseif event == "CHAT_MSG_RAID" or event == "CHAT_MSG_RAID_LEADER" then
         local msg, sender = ...
         if msg and sender and msg:lower():find("^hey aldric") then
-            local senderZone = GetGuildMemberZone(sender)
-            AddMessage("raid", sender .. ": " .. msg, senderZone)
+            local senderInfo = GetGuildMemberInfo(sender)
+            AddMessage("raid", sender .. ": " .. msg, senderInfo)
         end
     end
 end)

@@ -10,9 +10,11 @@ AldricBotAddon/       WoW addon (copy this folder into Interface/AddOns/)
   AldricBotAddon.lua  Addon logic — message capture, state export, command execution
 aldricbot/            Python package
   config.py           Environment config and SavedVariables path
+  events.py           Event dispatch system — handlers for chat, logins, achievements, level-ups
   input_control.py    Keyboard simulation (pynput)
   lua_io.py           Lua SavedVariables parser
-daemon.py             Background daemon — game loop, message detection, Claude dispatch
+  memory.py           Guildmate and server memory I/O
+daemon.py             Background daemon — game loop, event dispatch, Claude dispatch
 ```
 
 ## How the System Works
@@ -24,6 +26,10 @@ Communication happens through a SavedVariables file. Each cycle:
 4. Repeat from step 1
 
 Each reload cycle takes ~10 seconds.
+
+## Auth Keepalive
+
+If the prompt is exactly `ping`, respond with exactly `pong`. Nothing else. This is used by the daemon for periodic OAuth token refresh.
 
 ## Current Character
 
@@ -147,8 +153,72 @@ When invoked by `daemon.py` via `claude -p`, the message detection is handled by
    - Any WoW-related question → use WebSearch when helpful for accuracy, then answer in character
    - Personal / backstory → answer from Aldric's backstory
    - Out of scope → deflect in character
-3. **Output a JSON array of chat command strings** — the daemon parses your output and types each command directly into WoW chat via keyboard simulation. No `/reload` needed.
+3. **Output a JSON object** with two fields:
+   ```json
+   {
+     "commands": ["/g By the Light, friend...", "/g ...his fall is a warning."],
+     "memory": "Updated 3-5 sentence summary of what you know about this person, or null if no update needed."
+   }
+   ```
+   The `commands` array contains chat command strings (same routing rules as Chat RP). The `memory` field should be a rewritten summary incorporating this conversation — not appended, rewritten to stay concise. Set to `null` if nothing notable was learned.
 4. **Stop immediately** — do not call `do_game_cycle()` or any other tools after sending. The daemon handles the next cycle.
+
+## Guildmate Memory
+
+The daemon maintains per-person memory files at `~/.aldricbot/guildmates/<Name>.json`. When you receive a message, the daemon injects the sender's memory into your prompt:
+- `"You remember this person: {summary}"` — if Aldric has spoken with them before
+- `"You have not met this person before."` — if this is a first interaction
+
+Use this memory naturally — reference past conversations, shared experiences, or running jokes. Do not recite the summary back verbatim. When composing the `memory` field in your response, rewrite the summary to incorporate new information from this conversation. Keep summaries to 3-5 sentences.
+
+Memory persists for anyone who has ever spoken to Aldric, regardless of guild membership.
+
+## Server Memory
+
+The daemon also maintains shared facts at `~/.aldricbot/server_memory.json`. These are things anyone has told Aldric to remember (e.g., "the guild is raiding ICC on Thursday"). When present, they appear in your prompt as:
+```
+Things you have been told to remember:
+- The guild is raiding ICC this Thursday at 8pm. (told by Fenwick on 2026-03-11 (Tuesday))
+- Grukk respecced from tank to DPS. (told by Liora on 2026-03-10 (Monday))
+```
+
+Use these facts naturally in conversation when relevant. The date context helps you reason about whether time-sensitive facts are still current.
+
+## Commands
+
+These commands are handled directly by the daemon (no Claude call needed). Confirmations are sent back via the same channel the command arrived on. The "Hey Aldric" prefix is required for guild/party/raid but optional for whispers.
+
+### From Any Channel (Guild, Party, Raid, or Whisper)
+
+Anyone can use these in any chat channel:
+
+- **"Hey Aldric, remember that [fact]"** — adds a fact to server memory
+- **"Hey Aldric, don't forget that [fact]"** — also adds to server memory (treated as "remember")
+- **"Hey Aldric, forget that [fact]"** — removes a matching fact from server memory (uses Claude to identify the match)
+
+### Whisper Only
+
+- **"Hey Aldric, help"** — lists available whisper commands
+- **"Hey Aldric, forget about me"** — deletes the sender's own memory
+- **"Hey Aldric, forget everything about me"** — same as above
+
+### Admin Commands (Whisper Only)
+
+The following commands require the sender to match the admin character, configured via `--admin` flag or `ALDRICBOT_ADMIN` env var. If no admin is configured, these commands are disabled (treated as regular whispers).
+
+- **"Hey Aldric, forget about [name]"** — deletes a guildmate's memory file
+- **"Hey Aldric, forget everything"** — deletes all guildmate memory files
+- **"Hey Aldric, forget all facts"** — deletes all server memory facts
+
+## Event Reactions
+
+The addon captures game events and the daemon reacts:
+
+- **Login** — when a guildmate comes online, Aldric greets them in guild chat
+- **Achievement** — when a guildmate earns an achievement, Aldric congratulates them
+- **Level-up** — when a guildmate levels up, Aldric acknowledges it
+
+For people Aldric remembers (has a memory file with summary), the daemon invokes Claude for personalized reactions. For unknown people, pre-written in-character responses are used. All reactions have cooldowns to prevent spam.
 
 ## Movement
 
@@ -167,7 +237,7 @@ Keep responses brief to conserve context window:
 
 ```
 Initialize:
-    lastRpAnsweredTime = 0
+    dispatcher = EventDispatcher(ChatHandler, LoginHandler, AchievementHandler, LevelUpHandler)
     cycle = 0
     next_emote_cycle = random(48..72)       # 8-12 min at 10s/cycle
     next_proactive_cycle = random(720..1440) # 2-4 hours
@@ -176,14 +246,13 @@ while running:
     state = do_game_cycle()       # /reload + wait 10s + read state
     cycle += 1
 
-    # Chat RP (guild + party + raid + whispers)
-    for msg in state.chatMessages:
-        if msg.type in ("guild", "party", "raid", "whisper") and msg.time > lastRpAnsweredTime:
-            invoke Claude with msg + zone/subZone context
-            Claude outputs JSON array of chat command strings
-            daemon types each command into WoW via keyboard simulation
-            lastRpAnsweredTime = msg.time
-            reset emote and proactive timers
+    # Dispatch all messages and events to handlers
+    # ChatHandler: guild/party/raid/whisper → Claude with memory injection → {commands, memory}
+    # LoginHandler: guildmate login → greeting (Claude for known, pre-written for unknown)
+    # AchievementHandler: achievement → reaction (Claude for known, pre-written for unknown)
+    # LevelUpHandler: level-up → reaction + auto-update level in memory
+    auth_ok, had_messages = dispatcher.dispatch(state, context)
+    if had_messages: reset emote and proactive timers
 
     # Idle emotes — subtle in-character actions when quiet
     if no messages and cycle >= next_emote_cycle:

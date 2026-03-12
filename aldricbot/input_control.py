@@ -6,7 +6,6 @@ cannot go through SavedVariables (movement, /reload).
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import platform
 import re
@@ -83,37 +82,24 @@ def _type_string(text: str) -> None:
         time.sleep(_KEY_TAP_DELAY)
 
 
-async def send_reload() -> None:
+def send_reload() -> None:
     """Send /reload to WoW by typing Enter → /reload → Enter."""
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, _send_reload_sync)
-
-
-def _send_reload_sync() -> None:
     _activate_wow_window()
-    # Open chat
     _keyboard.press(Key.enter)
     _keyboard.release(Key.enter)
     time.sleep(_CHAT_OPEN_DELAY)
-    # Type /reload
     _type_string("/reload")
     time.sleep(_KEY_TAP_DELAY)
-    # Send
     _keyboard.press(Key.enter)
     _keyboard.release(Key.enter)
 
 
-async def tap_key_async(key: str) -> None:
+def tap_key(key: str) -> None:
     """Tap a key once (press and release).
 
     Args:
         key: Single character key or 'space' for spacebar.
     """
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, _tap_key_sync, key)
-
-
-def _tap_key_sync(key: str) -> None:
     _activate_wow_window()
     if key == "space":
         _keyboard.press(Key.space)
@@ -123,26 +109,18 @@ def _tap_key_sync(key: str) -> None:
         _keyboard.release(key)
 
 
-async def send_chat_command(text: str) -> None:
+def send_chat_command(text: str) -> None:
     """Type a slash command directly into WoW's chat box and send it.
 
     Opens chat with Enter, types the text, then presses Enter to send.
     This bypasses SavedVariables entirely, avoiding the /reload overwrite race.
     """
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, _send_chat_command_sync, text)
-
-
-def _send_chat_command_sync(text: str) -> None:
     _activate_wow_window()
-    # Open chat
     _keyboard.press(Key.enter)
     _keyboard.release(Key.enter)
     time.sleep(_CHAT_OPEN_DELAY)
-    # Type the command
     _type_string(text)
     time.sleep(_KEY_TAP_DELAY)
-    # Send
     _keyboard.press(Key.enter)
     _keyboard.release(Key.enter)
     time.sleep(0.1)  # brief pause before next command
