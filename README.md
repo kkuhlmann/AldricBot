@@ -75,6 +75,7 @@ These require the bot operator to have configured an admin character. If you're 
 |---------|-------------|
 | `Hey Aldric, forget about [name]` | Erases Aldric's memory of another person |
 | `Hey Aldric, forget everything` | Erases all guildmate memories (server facts are kept) |
+| `Hey Aldric, forget all facts` | Erases all server memory facts |
 
 **Server facts** are shared knowledge — things like raid schedules, respec announcements, or guild news. Aldric references them naturally in conversation when relevant. Up to 20 facts can be stored at a time.
 
@@ -120,8 +121,12 @@ Both timers reset whenever someone talks to him.
 
 ### Run
 
+Set the required environment variables (see `.env.sample` for reference) and start the daemon:
+
 ```
-WOW_INSTALL_PATH="/path/to/WoW" WOW_ACCOUNT_NAME="YOUR_ACCOUNT" uv run python daemon.py
+export WOW_INSTALL_PATH="/path/to/WoW"
+export WOW_ACCOUNT_NAME="YOUR_ACCOUNT"
+uv run python daemon.py
 ```
 
 Optional flags:
@@ -150,6 +155,8 @@ aldricbot/            Python package
   input_control.py    Keyboard simulation (pynput)
   lua_io.py           Lua SavedVariables parser
   memory.py           Guildmate and server memory I/O
+tests/                Test suite
 daemon.py             Background daemon — game loop, event dispatch, Claude dispatch
 CLAUDE.md             Character persona and behavior instructions for Claude
+.env.sample           Environment variable reference
 ```

@@ -174,6 +174,7 @@ def _parse_json_response(text: str) -> dict | list | None:
 
 def _send_commands(commands: list[str]) -> None:
     """Validate and send chat commands to WoW."""
+    commands = [cmd.replace("\u2014", " ") for cmd in commands]
     commands = input_control.validate_and_fix_chunks(commands)
     for cmd in commands:
         input_control.send_chat_command(cmd)
@@ -447,10 +448,18 @@ class ChatHandler(EventHandler):
         parsed = _parse_json_response(result.stdout)
 
         if parsed is None:
-            _log(f"Failed to parse Claude response: {result.stdout}")
-            # Save metadata even if response parse fails
-            memory.save_guildmate(sender, guildmate)
-            return True
+            _log(f"Failed to parse Claude response (attempt 1): {result.stdout}")
+            # Retry once
+            result = _run_claude(prompt, ctx.model, ctx.session_ttl)
+            if result is not None and not _is_auth_error(result):
+                _log(f"Claude retry response: {result.stdout}")
+                parsed = _parse_json_response(result.stdout)
+
+            if parsed is None:
+                _log("Failed to parse Claude response (attempt 2), sending error")
+                _send_response(msg_type, sender, "Forgive me, my thoughts are... muddled. (Claude malformatted JSON)")
+                memory.save_guildmate(sender, guildmate)
+                return True
 
         # Handle both formats
         if isinstance(parsed, dict):
