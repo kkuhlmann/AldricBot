@@ -229,6 +229,7 @@ Optional flags:
 | `--session-ttl N` | `ALDRICBOT_SESSION_TTL` | 24 | Hours before conversation context resets |
 | `--admin NAME` | `ALDRICBOT_ADMIN` | *(none)* | Character name that can use admin commands |
 | `--character NAME` | `ALDRICBOT_CHARACTER` | `Aldric` | Character name for greeting prefix and memory isolation |
+| `--persona PATH` | `ALDRICBOT_PERSONA` | *(none)* | Path to persona YAML file |
 
 ### Stop
 
