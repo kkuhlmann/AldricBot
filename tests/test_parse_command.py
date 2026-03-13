@@ -2,7 +2,7 @@
 
 import pytest
 
-from aldricbot.events import _parse_command
+from aldricbot.chat_handler import _parse_command
 
 
 # ── Parametrized: command recognition ────────────────────────────
@@ -17,10 +17,13 @@ from aldricbot.events import _parse_command
         ("Fenwick: Hey Aldric, do not forget that we need flasks", "guild", ("remember", "we need flasks")),
         # Forget server
         ("Fenwick: Hey Aldric, forget that ICC is Thursday", "guild", ("forget_server", "ICC is Thursday")),
-        # Help
+        # Help (any channel)
         ("Fenwick: Hey Aldric, help", "whisper", ("help", "")),
         ("Fenwick: Hey Aldric, commands", "whisper", ("help", "")),
         ("Fenwick: Hey Aldric, what can I say to you?", "whisper", ("help", "")),
+        ("Fenwick: Hey Aldric, help", "guild", ("help", "")),
+        ("Fenwick: Hey Aldric, help", "party", ("help", "")),
+        ("Fenwick: Hey Aldric, help", "raid", ("help", "")),
         # Forget self
         ("Fenwick: Hey Aldric, forget about me", "whisper", ("forget_self", "")),
         ("Fenwick: Hey Aldric, forget everything about me", "whisper", ("forget_self", "")),
@@ -38,6 +41,18 @@ from aldricbot.events import _parse_command
         # Remember/forget from party and raid channels
         ("Fenwick: Hey Aldric, remember that we need more healers", "party", ("remember", "we need more healers")),
         ("Fenwick: Hey Aldric, forget that we need more healers", "raid", ("forget_server", "we need more healers")),
+        # About self
+        ("Fenwick: Hey Aldric, tell me about myself", "guild", ("about_self", "")),
+        ("Fenwick: Hey Aldric, tell me about me", "guild", ("about_self", "")),
+        ("Fenwick: tell me about myself", "whisper", ("about_self", "")),
+        ("Fenwick: tell me about me", "whisper", ("about_self", "")),
+        # World facts
+        ("Fenwick: Hey Aldric, tell me the world facts", "guild", ("world_facts", "")),
+        ("Fenwick: Hey Aldric, tell me the facts", "guild", ("world_facts", "")),
+        ("Fenwick: Hey Aldric, what are the world facts", "guild", ("world_facts", "")),
+        ("Fenwick: Hey Aldric, what are the facts", "guild", ("world_facts", "")),
+        ("Fenwick: tell me the world facts", "whisper", ("world_facts", "")),
+        ("Fenwick: tell me the facts", "whisper", ("world_facts", "")),
     ],
 )
 def test_command_recognition(msg_text, msg_type, expected):
@@ -111,3 +126,36 @@ def test_case_insensitive_command():
 def test_hey_aldric_with_period():
     result = _parse_command("Fenwick: Hey Aldric. remember that X", "guild")
     assert result == ("remember", "X")
+
+
+# ── About self vs about others ──────────────────────────────────
+
+def test_tell_me_about_other_person_is_not_command():
+    """'tell me about Grukk' is NOT a command — falls through to Claude."""
+    assert _parse_command("Fenwick: Hey Aldric, tell me about Grukk", "guild") is None
+
+
+def test_tell_me_about_myself_case_insensitive():
+    result = _parse_command("Fenwick: Hey Aldric, TELL ME ABOUT MYSELF", "guild")
+    assert result == ("about_self", "")
+
+
+# ── Custom character name ────────────────────────────────────────
+
+
+def test_custom_character_name_matches():
+    """Commands using a custom character name are recognized."""
+    result = _parse_command("Fenwick: Hey Theron, remember that ICC is Thursday", "guild", character_name="Theron")
+    assert result == ("remember", "ICC is Thursday")
+
+
+def test_custom_character_name_case_insensitive():
+    """Custom character name matching is case-insensitive."""
+    result = _parse_command("Fenwick: HEY THERON, remember that X", "guild", character_name="Theron")
+    assert result == ("remember", "X")
+
+
+def test_wrong_character_name_returns_none():
+    """Using the wrong character name in guild chat returns None."""
+    result = _parse_command("Fenwick: Hey Aldric, remember that X", "guild", character_name="Theron")
+    assert result is None

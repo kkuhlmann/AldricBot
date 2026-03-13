@@ -13,20 +13,26 @@ Stop:
     kill $(cat ~/.aldricbot/daemon.lock)
 """
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import argparse
 import json
 import os
 import random
+import signal
 import subprocess
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
-from aldricbot import config, input_control, lua_io
+from aldricbot import calendar, config, input_control, lua_io, memory
+from aldricbot import persona as persona_mod
+from aldricbot.chat_handler import ChatHandler
 from aldricbot.events import (
     AchievementHandler,
-    ChatHandler,
     EventContext,
     EventDispatcher,
     LevelUpHandler,
@@ -36,10 +42,21 @@ from aldricbot.events import (
     _send_commands,
 )
 
-STATE_DIR = Path.home() / ".aldricbot"
-DAEMON_LOCK = STATE_DIR / "daemon.lock"
+BASE_STATE_DIR = Path.home() / ".aldricbot"
+DAEMON_LOCK = BASE_STATE_DIR / "daemon.lock"
+
+# Per-character paths — set by _init_daemon_paths()
+STATE_DIR = BASE_STATE_DIR
 SESSION_START_FILE = STATE_DIR / "session_start.txt"
 PROACTIVE_TIME_FILE = STATE_DIR / "next_proactive_cycle.txt"
+
+
+def _init_daemon_paths(character_name: str) -> None:
+    """Reconfigure daemon-level paths for a specific character."""
+    global STATE_DIR, SESSION_START_FILE, PROACTIVE_TIME_FILE
+    STATE_DIR = BASE_STATE_DIR / "characters" / character_name
+    SESSION_START_FILE = STATE_DIR / "session_start.txt"
+    PROACTIVE_TIME_FILE = STATE_DIR / "next_proactive_cycle.txt"
 
 CYCLE_SECONDS = 10
 AFK_SIT_EVERY = 30  # ~5 minutes at 10s per cycle
@@ -50,6 +67,17 @@ AUTH_KEEPALIVE_INTERVAL = 4320  # ~12 hours at 10s/cycle
 IDLE_EMOTE_MIN_CYCLES = 48  # ~8 min at 10s/cycle
 IDLE_EMOTE_MAX_CYCLES = 72  # ~12 min
 
+FAREWELL_EMOTE = "/e closes his journal, tucks it beneath his arm, and walks slowly into the distance."
+
+shutdown_requested = False
+
+
+def _handle_shutdown_signal(signum, frame):
+    """Signal handler for SIGTERM/SIGINT — sets flag for clean exit."""
+    global shutdown_requested
+    shutdown_requested = True
+
+
 IDLE_EMOTES = [
     "/e adjusts his journal and dips the quill in ink.",
     "/e rubs his left hand where two fingers used to be.",
@@ -59,6 +87,40 @@ IDLE_EMOTES = [
     "/e pauses, listening to the wind.",
     "/e absently traces the scar along his jaw.",
 ]
+
+SEASONAL_EMOTES: dict[str, list[str]] = {
+    "Winter": [
+        "/e winces and rubs his knee — the cold makes it ache.",
+        "/e pulls his cloak tighter against the chill.",
+        "/e breathes into his hands, watching the frost on his breath.",
+    ],
+    "Spring": [
+        "/e tilts his face toward the sun, savoring its warmth.",
+        "/e watches new blossoms stir in the breeze.",
+    ],
+    "Summer": [
+        "/e wipes sweat from his brow beneath the summer sun.",
+        "/e seeks the shade, muttering about the heat.",
+    ],
+    "Autumn": [
+        "/e watches the leaves drift down, lost in memory.",
+        "/e pulls his journal close as the evening chill settles in.",
+    ],
+    "Brewfest": [
+        "/e sniffs the air — the scent of fresh ale carries far.",
+        "/e eyes a passing Brewfest reveler and shakes his head with a faint smile.",
+    ],
+    "Feast of Winter Veil": [
+        "/e glances at the festive decorations with a rare, soft smile.",
+        "/e hums a half-remembered Winter Veil carol under his breath.",
+    ],
+    "Midsummer Fire Festival": [
+        "/e watches the midsummer bonfires flicker in the distance.",
+    ],
+    "Hallow's End": [
+        "/e eyes the jack-o'-lanterns warily — he has seen enough real horrors.",
+    ],
+}
 
 PROACTIVE_MIN_CYCLES = 720  # ~2 hours
 PROACTIVE_MAX_CYCLES = 1440  # ~4 hours
@@ -133,12 +195,23 @@ def parse_args():
         default=os.environ.get("ALDRICBOT_ADMIN"),
         help="Admin character name for privileged commands. Also settable via ALDRICBOT_ADMIN env var.",
     )
+    parser.add_argument(
+        "--character",
+        default=os.environ.get("ALDRICBOT_CHARACTER", "Aldric"),
+        help="Character name for greeting prefix and memory isolation. Also settable via ALDRICBOT_CHARACTER env var.",
+    )
+    parser.add_argument(
+        "--persona",
+        default=os.environ.get("ALDRICBOT_PERSONA"),
+        help="Path to persona YAML file. Also settable via ALDRICBOT_PERSONA env var.",
+    )
     return parser.parse_args()
 
 
 def setup():
     """Initialize daemon state directory and lock file."""
-    STATE_DIR.mkdir(exist_ok=True)
+    BASE_STATE_DIR.mkdir(exist_ok=True)
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
     DAEMON_LOCK.write_text(str(os.getpid()))
 
 
@@ -189,11 +262,16 @@ def invoke_claude_proactive(
             location_line += f" — {sub_zone}"
         location_line += "\n"
 
+    cal_context = calendar.get_calendar_context(datetime.now().date())
+    calendar_line = f"{cal_context}\n" if cal_context else ""
+
     prompt = (
         "Daemon mode: proactive RP.\n"
         "No one has spoken to you recently. Share a brief thought, memory, "
         "or observation in guild chat.\n"
         f"{location_line}"
+        f"{calendar_line}"
+        "If a seasonal event is active, you may reference it naturally.\n"
         "Keep it to 1-2 sentences. Be natural — a quiet musing, not a speech.\n"
         "Your output MUST be ONLY a JSON array of /g chat command strings.\n"
         'Example: ["/g The wind carries the scent of pine... '
@@ -276,11 +354,36 @@ def main():
     """Main game loop."""
     args = parse_args()
 
+    # Load persona if provided
+    persona = None
+    if args.persona:
+        persona = persona_mod.load_persona(args.persona)
+        # --character / ALDRICBOT_CHARACTER is the single source of truth for name
+        persona["name"] = args.character
+        # Render CLAUDE.md from template
+        persona_mod.render_claude_md(persona)
+        _log(f"Persona loaded: {args.character} ({args.persona})")
+
+    # Load emotes from persona (with fallback to module-level defaults)
+    idle_emotes = persona_mod.get_idle_emotes(persona) or IDLE_EMOTES
+    seasonal_emotes = persona_mod.get_seasonal_emotes(persona) or SEASONAL_EMOTES
+    farewell_emote = persona_mod.get_farewell_emote(persona) or FAREWELL_EMOTE
+
+    # Initialize per-character paths before anything else
+    from aldricbot import events as events_mod
+    memory.init_paths(args.character)
+    events_mod.init_paths(args.character)
+    _init_daemon_paths(args.character)
+
     _log(f"Starting AldricBot daemon (PID {os.getpid()})")
+    _log(f"Character: {args.character}")
     _log(f"Model: {args.model or 'haiku'}")
     _log(f"Session TTL: {args.session_ttl}h")
     _log(f"Admin: {args.admin or '(none — admin commands disabled)'}")
     _log(f"Lock file: {DAEMON_LOCK}")
+
+    signal.signal(signal.SIGTERM, _handle_shutdown_signal)
+    signal.signal(signal.SIGINT, _handle_shutdown_signal)
 
     setup()
 
@@ -309,6 +412,14 @@ def main():
 
     try:
         while True:
+            if shutdown_requested:
+                _log("Shutdown requested — sending farewell")
+                try:
+                    input_control.send_chat_command(farewell_emote)
+                except Exception as e:
+                    _log(f"Error sending farewell emote: {e}")
+                break
+
             state = do_game_cycle()
             cycle += 1
 
@@ -338,6 +449,9 @@ def main():
             zone = player.get("zone", "")
             sub_zone = player.get("subZone", "")
 
+            # Compute calendar context for this cycle
+            calendar_context = calendar.get_calendar_context(datetime.now().date())
+
             # Dispatch all messages and events to handlers
             ctx = EventContext(
                 zone=zone,
@@ -347,6 +461,9 @@ def main():
                 auth_ok=auth_ok,
                 cycle=cycle,
                 admin_name=args.admin,
+                calendar_context=calendar_context,
+                character_name=args.character,
+                persona=persona,
             )
             auth_ok, had_messages = dispatcher.dispatch(state, ctx)
 
@@ -362,7 +479,13 @@ def main():
 
             # Idle emotes when no messages for a while
             if not had_messages and cycle >= next_emote_cycle:
-                emote = random.choice(IDLE_EMOTES)
+                # Blend seasonal emotes into the pool
+                emote_pool = list(idle_emotes)
+                season_name = calendar.get_season(datetime.now().date())["name"]
+                emote_pool.extend(seasonal_emotes.get(season_name, []))
+                for event in calendar.get_active_events(datetime.now().date()):
+                    emote_pool.extend(seasonal_emotes.get(event["name"], []))
+                emote = random.choice(emote_pool)
                 _log(f"Idle emote: {emote}")
                 try:
                     input_control.send_chat_command(emote)
@@ -393,7 +516,7 @@ def main():
                 _log(f"AFK sit/stand (cycle {cycle})")
                 do_afk_sit()
     except KeyboardInterrupt:
-        _log("Interrupted by user")
+        _log("Interrupted by user (KeyboardInterrupt)")
     except Exception as e:
         _log(f"Fatal error: {e}")
         sys.exit(1)
