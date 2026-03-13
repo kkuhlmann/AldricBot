@@ -174,14 +174,14 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "CHAT_MSG_SYSTEM" then
         local msg = ...
         if msg then
-            local loginName = msg:match("^(%S+) has come online%.$")
+            -- Strip player hyperlinks: "|Hplayer:Name|h[Name]|h" → "Name"
+            local clean = msg:gsub("|H.-|h(.-)|h", "%1"):gsub("%[(.-)%]", "%1")
+            local loginName = clean:match("^(%S+) has come online%.$")
             if loginName then
                 local senderInfo = GetGuildMemberInfo(loginName)
-                if senderInfo then
-                    AddMessage("login", loginName, senderInfo)
-                end
+                AddMessage("login", loginName, senderInfo)
             else
-                local lvlName, lvlNum = msg:match("^(%S+) has reached level (%d+)!")
+                local lvlName, lvlNum = clean:match("^(%S+) has reached level (%d+)!")
                 if lvlName then
                     local senderInfo = GetGuildMemberInfo(lvlName)
                     AddMessage("levelup", lvlName .. ":" .. lvlNum, senderInfo)
@@ -195,10 +195,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         local msg, sender = ...
         if sender then
             local senderInfo = GetGuildMemberInfo(sender)
-            if senderInfo then
-                local clean = msg and msg:gsub("|H.-|h(.-)|h", "%1") or "an achievement"
-                AddMessage("achievement", sender .. ": " .. clean, senderInfo)
-            end
+            local clean = msg and msg:gsub("|H.-|h(.-)|h", "%1") or "an achievement"
+            AddMessage("achievement", sender .. ": " .. clean, senderInfo)
         end
 
     elseif event == "CHAT_MSG_WHISPER" then
