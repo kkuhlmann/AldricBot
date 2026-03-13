@@ -12,6 +12,8 @@ import pytest
 from aldricbot import memory
 from aldricbot.events import EventContext
 
+CHARACTER_NAME = "Aldric"
+
 
 # ── Filesystem isolation ────────────────────────────────────────
 
@@ -25,6 +27,7 @@ def tmp_state_dir(tmp_path, monkeypatch):
     monkeypatch.setattr("aldricbot.memory.STATE_DIR", tmp_path)
     monkeypatch.setattr("aldricbot.memory.GUILDMATES_DIR", guildmates_dir)
     monkeypatch.setattr("aldricbot.memory.SERVER_MEMORY_FILE", tmp_path / "server_memory.json")
+    monkeypatch.setattr("aldricbot.memory.SELF_MEMORY_FILE", tmp_path / "self_memory.json")
 
     monkeypatch.setattr("aldricbot.events.STATE_DIR", tmp_path)
     monkeypatch.setattr("aldricbot.events.LAST_EVENT_TIME_FILE", tmp_path / "last_event_time.txt")
@@ -107,7 +110,7 @@ def make_msg():
 @pytest.fixture
 def default_ctx():
     """Default EventContext with auth enabled and no admin."""
-    return EventContext(auth_ok=True, admin_name=None)
+    return EventContext(auth_ok=True, admin_name=None, character_name=CHARACTER_NAME)
 
 
 # ── Guildmate seeding ────────────────────────────────────────────

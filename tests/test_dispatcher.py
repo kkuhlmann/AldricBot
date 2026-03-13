@@ -7,9 +7,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from aldricbot.chat_handler import ChatHandler
 from aldricbot.events import (
     AchievementHandler,
-    ChatHandler,
     EventContext,
     EventDispatcher,
     EventHandler,
@@ -265,3 +265,103 @@ def test_each_message_handled_by_one_handler():
     d.dispatch(state, EventContext())
     assert len(h1.handled) == 1
     assert len(h2.handled) == 0
+
+
+# ── Event handler tier & disposition in prompts ──────────────────
+
+
+_GUILDMATE = {
+    "name": "Fenwick",
+    "first_seen": "2026-01-01",
+    "last_seen": "2026-03-12",
+    "times_spoken": 20,
+    "summary": "A curious warrior who asks about Ulduar.",
+    "friendliness": 4.0,
+    "class": "Warrior",
+    "level": 72,
+}
+
+_WARM_TIER_PHRASING = (
+    "Your disposition toward this person is Warm. "
+    "You are friendlier than usual and volunteer extra detail."
+)
+_HOSTILE_TIER_PHRASING = (
+    "Your disposition toward this person is Hostile. "
+    "You refuse to help them and may call them out openly."
+)
+
+
+def _mock_claude_response(commands):
+    """Create a mock subprocess result with valid JSON output."""
+    result = MagicMock()
+    result.returncode = 0
+    result.stdout = json.dumps(commands)
+    result.stderr = ""
+    return result
+
+
+@patch("aldricbot.events._run_claude")
+@patch("aldricbot.events.memory")
+def test_login_prompt_includes_warm_disposition(mock_memory, mock_run, mock_send_chat):
+    """Login greeting prompt includes relationship tier and warm disposition."""
+    mock_memory.load_guildmate.return_value = dict(_GUILDMATE)
+    mock_memory.get_relationship_tier.return_value = (
+        "familiar", 4, "You have spoken with this person many times: A curious warrior."
+    )
+    mock_memory.apply_friendliness_decay.return_value = 4.0
+    mock_memory.get_disposition_tier.return_value = ("warm", _WARM_TIER_PHRASING)
+    mock_run.return_value = _mock_claude_response(["/g Well met, Fenwick!"])
+
+    handler = LoginHandler()
+    ctx = EventContext(auth_ok=True)
+    handler.handle({"type": "login", "text": "Fenwick", "time": 100.0}, ctx)
+
+    prompt = mock_run.call_args[0][0]
+    assert "You have spoken with this person many times" in prompt
+    assert "Warm" in prompt
+    assert "Adjust your tone based on your disposition" in prompt
+
+
+@patch("aldricbot.events._run_claude")
+@patch("aldricbot.events.memory")
+def test_achievement_prompt_includes_hostile_disposition(mock_memory, mock_run, mock_send_chat):
+    """Achievement reaction prompt includes hostile disposition."""
+    guildmate = dict(_GUILDMATE, friendliness=-8.0)
+    mock_memory.load_guildmate.return_value = guildmate
+    mock_memory.get_relationship_tier.return_value = (
+        "familiar", 4, "You have spoken with this person many times: A curious warrior."
+    )
+    mock_memory.apply_friendliness_decay.return_value = -8.0
+    mock_memory.get_disposition_tier.return_value = ("hostile", _HOSTILE_TIER_PHRASING)
+    mock_run.return_value = _mock_claude_response(["/g ...noted."])
+
+    handler = AchievementHandler()
+    ctx = EventContext(auth_ok=True)
+    handler.handle({"type": "achievement", "text": "Fenwick: Glory of the Raider", "time": 100.0}, ctx)
+
+    prompt = mock_run.call_args[0][0]
+    assert "Hostile" in prompt
+    assert "Stay in character" in prompt
+
+
+@patch("aldricbot.events._run_claude")
+@patch("aldricbot.events.memory")
+def test_levelup_prompt_omits_neutral_disposition(mock_memory, mock_run, mock_send_chat):
+    """Level-up reaction prompt omits disposition line when neutral."""
+    guildmate = dict(_GUILDMATE, friendliness=0.0)
+    mock_memory.load_guildmate.return_value = guildmate
+    mock_memory.get_relationship_tier.return_value = (
+        "familiar", 4, "You have spoken with this person many times: A curious warrior."
+    )
+    mock_memory.apply_friendliness_decay.return_value = 0.0
+    mock_memory.get_disposition_tier.return_value = ("neutral", "Your disposition toward this person is Neutral.")
+    mock_memory.save_guildmate.return_value = None
+    mock_run.return_value = _mock_claude_response(["/g Well done, Fenwick."])
+
+    handler = LevelUpHandler()
+    ctx = EventContext(auth_ok=True)
+    handler.handle({"type": "levelup", "text": "Fenwick:73", "time": 100.0}, ctx)
+
+    prompt = mock_run.call_args[0][0]
+    assert "You have spoken with this person many times" in prompt
+    assert "Neutral" not in prompt

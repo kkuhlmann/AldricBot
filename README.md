@@ -34,17 +34,25 @@ He'll whisper back.
 
 ### Response Time
 
-Aldric checks for new messages every ~10 seconds. There may be a short delay while he thinks (especially for questions that require looking something up).
+Aldric checks for new messages every ~10 seconds. When he picks up your message, you'll see a thinking emote (like *adjusts his journal* or *narrows his eyes, recalling something from long ago*) before his reply arrives.
 
 ## Memory
 
-Aldric remembers everyone he talks to — across sessions, across days. He builds a mental picture of each person: what you've talked about, your class, your interests, running jokes.
-
-- **First meeting:** He'll introduce himself naturally.
-- **Returning conversations:** He'll reference things you've discussed before — *"Still chasing glory in Ulduar, I take it?"*
-- **Level-ups:** Your level is tracked automatically when the game announces it.
+Aldric remembers everyone he talks to — across sessions, across days. He builds a mental picture of each person: what you've talked about, your class, your interests, running jokes. He also keeps track of what he's told people about himself, so he stays consistent across conversations.
 
 Memory persists regardless of guild membership. If you've ever spoken to Aldric, he knows you.
+
+### Relationship Depth
+
+The more you talk to Aldric, the better he knows you. His familiarity grows over time from **Stranger** to **Acquaintance** to **Familiar** to **Well-known**. Higher tiers let Aldric recall more detail about you in conversation — a stranger gets a generic introduction, while a well-known friend gets references to shared history, past jokes, and things you've told him.
+
+### Disposition
+
+Separate from how well Aldric *knows* you, he also tracks how he *feels* about you. His disposition ranges from **Hostile** to **Fond** and shifts based on how you treat him — be friendly and he warms up, be rude and he grows cold. A hostile person might get *"You test my patience, and you have long since exhausted it"*, while a fond friend gets personal stories and familiar address.
+
+The two axes are independent — Aldric can know someone very well and still be cold toward them, or meet a stranger with neutral warmth.
+
+Disposition decays slowly toward neutral when someone is inactive — grudges fade, and warmth cools.
 
 ## Commands
 
@@ -57,12 +65,14 @@ The "Hey Aldric" prefix is required for guild, party, and raid chat. For whisper
 | `Hey Aldric, remember that [fact]` | Stores a shared fact (e.g., "the guild is raiding ICC on Thursday at 8pm") |
 | `Hey Aldric, don't forget that [fact]` | Same as above |
 | `Hey Aldric, forget that [fact]` | Removes a stored fact (Aldric figures out which one you mean) |
+| `Hey Aldric, tell me about myself` | Shows what Aldric knows about you (class, level, times spoken, his notes) |
+| `Hey Aldric, tell me the world facts` | Lists all stored server facts |
+| `Hey Aldric, help` | Lists available commands |
 
 ### Whisper Only
 
 | Command | What it does |
 |---------|-------------|
-| `Hey Aldric, help` | Lists available commands |
 | `Hey Aldric, forget about me` | Erases all of Aldric's memory of you |
 | `Hey Aldric, forget everything about me` | Same as above |
 | `Hey Aldric, forget about [your name]` | Same as above (using your character name) |
@@ -89,14 +99,96 @@ Aldric reacts to guild events without being prompted:
 
 Each reaction type has a cooldown (5 minutes for logins, 1 minute for achievements/level-ups) to avoid spam during rapid reconnects or achievement chains.
 
+## Calendar Awareness
+
+Aldric tracks the real-world date and maps it to WotLK's in-game seasonal events. When an event is active, he references it naturally — mentioning Brewfest kegs, Hallow's End decorations, or Winter Veil gifts as things happening around him, not data he's reading.
+
+**Seasons** affect his mood and behavior. In winter his knee aches more, in summer he complains about the heat. Season-appropriate idle emotes are blended into his normal rotation.
+
+**Active events** appear in his conversations, login greetings, and idle musings. During Brewfest he might greet you with a remark about the ale; during Hallow's End he'll eye the jack-o'-lanterns warily.
+
+**Upcoming events** (within 14 days) let him anticipate what's coming — "Brewfest draws near" — without being told.
+
+The full event calendar: Lunar Festival, Love is in the Air, Noblegarden, Children's Week, Midsummer Fire Festival, Brewfest, Hallow's End, Day of the Dead, Pilgrim's Bounty, Feast of Winter Veil, and the monthly Darkmoon Faire.
+
 ## Idle Behavior
 
 When no one is talking to him, Aldric stays in character:
 
-- **Emotes** (every 8–12 minutes) — Small actions like adjusting his journal, rubbing the hand where two fingers used to be, or shifting weight off his bad knee.
-- **Musings** (every 2–4 hours) — An unprompted thought in guild chat, like a quiet observation about the current zone or a memory from his past.
+- **Emotes** (every 8–12 minutes) — Small actions like adjusting his journal, rubbing the hand where two fingers used to be, or shifting weight off his bad knee. During seasonal events or specific weather, event-themed emotes are mixed in.
+- **Musings** (every 2–4 hours) — An unprompted thought in guild chat, like a quiet observation about the current zone, a memory from his past, or a remark about an active seasonal event.
 
 Both timers reset whenever someone talks to him.
+
+## Persona System
+
+AldricBot uses a **persona YAML file** and a **Jinja2 template** to generate the `CLAUDE.md` that drives the bot's personality. This means you can create entirely different characters without editing `CLAUDE.md` directly.
+
+### How It Works
+
+```
+personas/aldric.yaml  ──┐
+                        ├──▶  persona.py  ──▶  CLAUDE.md
+CLAUDE.md.j2  ──────────┘
+```
+
+The persona YAML defines the character (name, race, class, backstory, emotes, etc.). The Jinja2 template (`CLAUDE.md.j2`) contains the bot's behavior rules with `{{ name }}`, `{{ race }}`, etc. placeholders. Running `render_claude_md()` combines them into a final `CLAUDE.md`.
+
+### Persona YAML Structure
+
+Required fields:
+
+| Field | Description |
+|-------|-------------|
+| `race` | Character race (e.g., Human, Dwarf) |
+| `class` | Character class (e.g., Paladin, Mage) |
+
+Optional fields:
+
+| Field | Description |
+|-------|-------------|
+| `name` | Character name |
+| `age` | Character age |
+| `build` | Physical description |
+| `scars` | Scars and visible marks |
+| `eyes` | Eye description |
+| `speaking_style` | How the character talks |
+| `backstory` | List of `{title, text}` entries |
+| `personality_anchors` | List of behavioral quirks |
+| `emotes.idle` | Idle emote strings |
+| `emotes.seasonal` | Seasonal emotes keyed by season/event name |
+| `emotes.thinking` | Thinking emotes shown before replies |
+| `emotes.auth_down` | In-character auth-failure messages |
+| `emotes.farewell` | Farewell emote on shutdown |
+| `responses.login_greetings` | Pre-written login greetings (use `{name}` placeholder) |
+| `responses.achievement_reactions` | Pre-written achievement reactions |
+| `responses.levelup_reactions` | Pre-written level-up reactions |
+
+See [personas/aldric.yaml](personas/aldric.yaml) for a complete example.
+
+### Class Personalities
+
+Class-specific speaking styles live in [personas/class_personalities.yaml](personas/class_personalities.yaml) and are automatically looked up by the character's `class` field. Supported classes: Paladin, Priest, Mage, Warrior, Hunter, Rogue, Warlock, Death Knight, Druid, Shaman.
+
+### Creating a Custom Persona
+
+1. Copy `personas/aldric.yaml` and edit it with your character's details
+2. Render `CLAUDE.md`:
+   ```
+   uv run python -m aldricbot.persona --persona personas/your_character.yaml
+   ```
+3. Start the daemon with `--character YOUR_NAME` so memory and greetings use the right name
+
+### Rendering Options
+
+```
+uv run python -m aldricbot.persona \
+  --persona personas/your_character.yaml \
+  --template CLAUDE.md.j2 \
+  --output CLAUDE.md
+```
+
+`--template` and `--output` default to the project root.
 
 ## Setup
 
@@ -136,12 +228,16 @@ Optional flags:
 | `--model {opus,sonnet,haiku}` | `ALDRICBOT_MODEL` | haiku | Claude model to use |
 | `--session-ttl N` | `ALDRICBOT_SESSION_TTL` | 24 | Hours before conversation context resets |
 | `--admin NAME` | `ALDRICBOT_ADMIN` | *(none)* | Character name that can use admin commands |
+| `--character NAME` | `ALDRICBOT_CHARACTER` | `Aldric` | Character name for greeting prefix and memory isolation |
+| `--persona PATH` | `ALDRICBOT_PERSONA` | *(none)* | Path to persona YAML file |
 
 ### Stop
 
 ```
 kill $(cat ~/.aldricbot/daemon.lock)
 ```
+
+Aldric will send a farewell emote before exiting: *closes his journal, tucks it beneath his arm, and walks slowly into the distance.*
 
 ## Project Structure
 
@@ -150,13 +246,20 @@ AldricBotAddon/       WoW addon (copy into Interface/AddOns/)
   AldricBotAddon.toc  Addon manifest
   AldricBotAddon.lua  Message capture, state export, command execution
 aldricbot/            Python package
+  calendar.py         WotLK seasonal event schedule and season computation
+  chat_handler.py     Chat message handling — command parsing, Claude dispatch, memory updates
   config.py           Environment config and SavedVariables path
-  events.py           Event dispatch system — chat, logins, achievements, level-ups
+  events.py           Event dispatch system — logins, achievements, level-ups
   input_control.py    Keyboard simulation (pynput)
   lua_io.py           Lua SavedVariables parser
   memory.py           Guildmate and server memory I/O
+  persona.py          Persona loading, CLAUDE.md rendering, emote/response accessors
+personas/             Character persona definitions
+  aldric.yaml         Default persona — Aldric the paladin chronicler
+  class_personalities.yaml  Class-specific speaking styles
 tests/                Test suite
 daemon.py             Background daemon — game loop, event dispatch, Claude dispatch
-CLAUDE.md             Character persona and behavior instructions for Claude
+CLAUDE.md             Character persona and behavior instructions (generated from template)
+CLAUDE.md.j2          Jinja2 template for CLAUDE.md
 .env.sample           Environment variable reference
 ```

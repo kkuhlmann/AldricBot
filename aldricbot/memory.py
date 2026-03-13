@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -15,6 +16,36 @@ from pathlib import Path
 STATE_DIR = Path.home() / ".aldricbot"
 GUILDMATES_DIR = STATE_DIR / "guildmates"
 SERVER_MEMORY_FILE = STATE_DIR / "server_memory.json"
+SELF_MEMORY_FILE = STATE_DIR / "self_memory.json"
+
+
+def init_paths(character_name: str) -> None:
+    """Reconfigure module-level paths for a specific character.
+
+    Also performs a one-time migration from the old flat layout
+    (~/.aldricbot/guildmates/) to the new per-character layout
+    (~/.aldricbot/characters/<name>/) if needed.
+    """
+    global STATE_DIR, GUILDMATES_DIR, SERVER_MEMORY_FILE, SELF_MEMORY_FILE
+
+    base = Path.home() / ".aldricbot"
+    new_dir = base / "characters" / character_name
+
+    # One-time migration: move old flat layout into the new character dir
+    old_guildmates = base / "guildmates"
+    if old_guildmates.exists() and not new_dir.exists():
+        new_dir.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(old_guildmates), str(new_dir / "guildmates"))
+        # Migrate server_memory.json and self_memory.json if they exist
+        for fname in ("server_memory.json", "self_memory.json"):
+            old_file = base / fname
+            if old_file.exists():
+                shutil.move(str(old_file), str(new_dir / fname))
+
+    STATE_DIR = new_dir
+    GUILDMATES_DIR = new_dir / "guildmates"
+    SERVER_MEMORY_FILE = new_dir / "server_memory.json"
+    SELF_MEMORY_FILE = new_dir / "self_memory.json"
 
 MAX_SERVER_FACTS = 20
 
@@ -74,6 +105,105 @@ def delete_all_guildmates() -> int:
             f.unlink()
             count += 1
     return count
+
+
+# ── Disposition tiers ──────────────────────────────────────────────
+
+DISPOSITION_TIERS = [
+    # (min_score, tier_name, prompt_phrasing)
+    (6, "fond", "Your disposition toward this person is Fond. You are very warm toward them and share personal stories freely."),
+    (2, "warm", "Your disposition toward this person is Warm. You are friendlier than usual and volunteer extra detail."),
+    (-1, "neutral", "Your disposition toward this person is Neutral."),
+    (-5, "cold", "Your disposition toward this person is Cold. You are curt and dismissive toward them."),
+    (-10, "hostile", "Your disposition toward this person is Hostile. You refuse to help them and may call them out openly."),
+]
+
+FRIENDLINESS_DECAY_PER_DAY = 0.25
+
+
+def get_disposition_tier(score: float) -> tuple[str, str]:
+    """Map a friendliness score to a disposition tier.
+
+    Returns (tier_name, prompt_phrasing).
+    """
+    int_score = int(score)
+    for min_score, tier_name, phrasing in DISPOSITION_TIERS:
+        if int_score >= min_score:
+            return tier_name, phrasing
+    return "hostile", DISPOSITION_TIERS[-1][2]
+
+
+def apply_friendliness_decay(data: dict) -> float:
+    """Apply daily decay toward neutral based on inactivity.
+
+    Reads 'friendliness' and 'last_seen' from guildmate data.
+    Returns the decayed score (does NOT save).
+    """
+    score = float(data.get("friendliness", 0.0))
+    if score == 0.0:
+        return score
+
+    last_seen = data.get("last_seen", "")
+    if not last_seen:
+        return score
+
+    try:
+        last_date = datetime.strptime(last_seen, "%Y-%m-%d")
+        days_inactive = (datetime.now() - last_date).days
+    except (ValueError, TypeError):
+        return score
+
+    if days_inactive <= 0:
+        return score
+
+    decay = days_inactive * FRIENDLINESS_DECAY_PER_DAY
+    if score > 0:
+        score = max(0.0, score - decay)
+    else:
+        score = min(0.0, score + decay)
+
+    return score
+
+
+# ── Relationship tiers ─────────────────────────────────────────────
+
+RELATIONSHIP_TIERS = [
+    # (min_spoken, tier_name, sentence_limit, prompt_template)
+    (50, "well_known", 10, "You have spoken with this person extensively: {summary}"),
+    (15, "familiar", 8, "You have spoken with this person many times: {summary}"),
+    (1, "acquaintance", 6, "You have spoken with this person a few times: {summary}"),
+    (0, "stranger", 0, "You have not met this person before."),
+]
+
+
+def get_relationship_tier(name: str) -> tuple[str, int, str]:
+    """Derive relationship tier from interaction count.
+
+    Returns (tier_name, sentence_limit, prompt_phrasing).
+    Must be called BEFORE update_guildmate_metadata() to get the
+    pre-increment count.
+    """
+    data = load_guildmate(name)
+    times_spoken = data.get("times_spoken", 0) if data else 0
+    summary = data.get("summary", "") if data else ""
+
+    for min_count, tier_name, limit, template in RELATIONSHIP_TIERS:
+        if times_spoken >= min_count:
+            phrasing = template.format(summary=summary) if summary else template.split(": {summary}")[0] + "."
+            if tier_name == "stranger":
+                phrasing = template
+            return tier_name, limit, phrasing
+
+    # Fallback (should not reach here)
+    return "stranger", 0, "You have not met this person before."
+
+
+def get_nickname(name: str) -> str | None:
+    """Get a guildmate's nickname, or None if not set."""
+    data = load_guildmate(name)
+    if data:
+        return data.get("nickname")
+    return None
 
 
 def update_guildmate_metadata(name: str, msg: dict) -> dict:
@@ -159,3 +289,23 @@ def clear_server_memory() -> int:
     if count:
         save_server_memory({"facts": []})
     return count
+
+
+# ── Self Memory ──────────────────────────────────────────────────
+
+
+def load_self_memory() -> dict:
+    """Load Aldric's self-memory. Returns empty structure if not found."""
+    try:
+        return json.loads(SELF_MEMORY_FILE.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"summary": "", "last_updated": ""}
+
+
+def save_self_memory(summary: str) -> None:
+    """Save Aldric's self-memory atomically."""
+    data = {
+        "summary": summary,
+        "last_updated": datetime.now().strftime("%Y-%m-%d"),
+    }
+    _atomic_write(SELF_MEMORY_FILE, data)

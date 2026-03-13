@@ -38,6 +38,16 @@ local function AddMessage(msgType, text, senderInfo)
     AldricBotAddonDB.messageHistory = messageBuffer
 end
 
+-- Lazy-initialized pattern for "hey <player_name>" prefix matching
+local heyPattern = nil
+local function GetHeyPattern()
+    if not heyPattern then
+        local name = UnitName("player")
+        if name then heyPattern = "^hey " .. name:lower() end
+    end
+    return heyPattern
+end
+
 local function GetGuildMemberInfo(name)
     if not IsInGuild() then return nil end
     for i = 1, GetNumGuildMembers() do
@@ -200,21 +210,24 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "CHAT_MSG_GUILD" then
         local msg, sender = ...
-        if msg and sender and msg:lower():find("^hey aldric") then
+        local pat = GetHeyPattern()
+        if msg and sender and pat and msg:lower():find(pat) then
             local senderInfo = GetGuildMemberInfo(sender)
             AddMessage("guild", sender .. ": " .. msg, senderInfo)
         end
 
     elseif event == "CHAT_MSG_PARTY" or event == "CHAT_MSG_PARTY_LEADER" then
         local msg, sender = ...
-        if msg and sender and msg:lower():find("^hey aldric") then
+        local pat = GetHeyPattern()
+        if msg and sender and pat and msg:lower():find(pat) then
             local senderInfo = GetGuildMemberInfo(sender)
             AddMessage("party", sender .. ": " .. msg, senderInfo)
         end
 
     elseif event == "CHAT_MSG_RAID" or event == "CHAT_MSG_RAID_LEADER" then
         local msg, sender = ...
-        if msg and sender and msg:lower():find("^hey aldric") then
+        local pat = GetHeyPattern()
+        if msg and sender and pat and msg:lower():find(pat) then
             local senderInfo = GetGuildMemberInfo(sender)
             AddMessage("raid", sender .. ": " .. msg, senderInfo)
         end
