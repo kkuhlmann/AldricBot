@@ -31,7 +31,7 @@ persona_prompt.md.j2          Jinja2 template for persona prompt (rendered to pe
 Communication happens through a WoW SavedVariables file. Each cycle:
 1. `do_game_cycle()` sends `/reload` to WoW and reads fresh game state
 2. `EventDispatcher` dispatches messages/events to registered handlers
-3. Handlers invoke `claude -p` with `--append-system-prompt-file persona_prompt.md` for AI responses
+3. Handlers invoke `claude -p` with `--system-prompt-file persona_prompt.md` for AI responses
 4. Responses are sent back to WoW via keyboard simulation
 5. Repeat from step 1
 
@@ -47,7 +47,7 @@ personas/aldric.yaml  ──┐
 persona_prompt.md.j2  ──────────┘
 ```
 
-`render_claude_md()` in `persona.py` combines them. The daemon calls this at startup when `--persona` is provided. The rendered file is passed to every `claude -p` invocation via `--append-system-prompt-file`.
+`render_claude_md()` in `persona.py` combines them. The daemon calls this at startup when `--persona` is provided. The rendered file is passed to every `claude -p` invocation via `--system-prompt-file`.
 
 ## Game Loop
 
@@ -91,3 +91,7 @@ Movement uses keyboard simulation (not SavedVariables), so it works independentl
 - `move_forward(duration)` / `move_backward(duration)` - walk in seconds
 - `turn_left(duration)` / `turn_right(duration)` - turn (~0.45s = 90 degrees)
 - `jump()` - jump
+
+## Maintenance
+
+After any change to commands, flags, project structure, or user-facing behavior, check that `README.md` is still accurate and update it if needed. The README is the primary user-facing documentation.

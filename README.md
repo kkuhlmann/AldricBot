@@ -68,22 +68,17 @@ The "Hey Aldric" prefix is required for guild, party, and raid chat. For whisper
 
 ### From Any Channel (Guild, Party, Raid, or Whisper)
 
-| Command                                | What it does                                                               |
-| -------------------------------------- | -------------------------------------------------------------------------- |
-| `Hey Aldric, remember that [fact]`     | Stores a shared fact (e.g., "the guild is raiding ICC on Thursday at 8pm") |
-| `Hey Aldric, don't forget that [fact]` | Same as above                                                              |
-| `Hey Aldric, forget that [fact]`       | Removes a stored fact (Aldric figures out which one you mean)              |
-| `Hey Aldric, tell me about myself`     | Shows what Aldric knows about you (class, level, times spoken, his notes)  |
-| `Hey Aldric, tell me the world facts`  | Lists all stored server facts                                              |
-| `Hey Aldric, help`                     | Lists available commands                                                   |
-
-### Whisper Only
-
-| Command                                  | What it does                              |
-| ---------------------------------------- | ----------------------------------------- |
-| `Hey Aldric, forget about me`            | Erases all of Aldric's memory of you      |
-| `Hey Aldric, forget everything about me` | Same as above                             |
-| `Hey Aldric, forget about [your name]`   | Same as above (using your character name) |
+| Command                                  | What it does                                                               |
+| ---------------------------------------- | -------------------------------------------------------------------------- |
+| `Hey Aldric, remember that [fact]`       | Stores a shared fact (e.g., "the guild is raiding ICC on Thursday at 8pm") |
+| `Hey Aldric, don't forget that [fact]`   | Same as above                                                              |
+| `Hey Aldric, forget that [fact]`         | Removes a stored fact (Aldric figures out which one you mean)              |
+| `Hey Aldric, forget about me`            | Erases all of Aldric's memory of you                                       |
+| `Hey Aldric, forget everything about me` | Same as above                                                              |
+| `Hey Aldric, forget about [your name]`   | Same as above (using your character name)                                  |
+| `Hey Aldric, tell me about myself`       | Shows what Aldric knows about you (class, level, times spoken, his notes)  |
+| `Hey Aldric, tell me the world facts`    | Lists all stored server facts                                              |
+| `Hey Aldric, help`                       | Lists available commands                                                   |
 
 ### Admin Only (Whisper)
 
