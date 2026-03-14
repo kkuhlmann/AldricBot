@@ -3,4 +3,4 @@
 *.pyc
 .env
 IDEAS.md
-CLAUDE.md
+persona_prompt.md

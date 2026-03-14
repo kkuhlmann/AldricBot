@@ -163,6 +163,7 @@ eventFrame:RegisterEvent("CHAT_MSG_PARTY_LEADER")
 eventFrame:RegisterEvent("CHAT_MSG_RAID")
 eventFrame:RegisterEvent("CHAT_MSG_RAID_LEADER")
 eventFrame:RegisterEvent("CHAT_MSG_ACHIEVEMENT")
+eventFrame:RegisterEvent("CHAT_MSG_GUILD_ACHIEVEMENT")
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "UI_ERROR_MESSAGE" then
@@ -181,17 +182,18 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
                 local senderInfo = GetGuildMemberInfo(loginName)
                 AddMessage("login", loginName, senderInfo)
             else
-                local lvlName, lvlNum = clean:match("^(%S+) has reached level (%d+)!")
+                local lvlName, lvlNum = clean:match("^(%S+) has reached level (%d+)")
                 if lvlName then
                     local senderInfo = GetGuildMemberInfo(lvlName)
                     AddMessage("levelup", lvlName .. ":" .. lvlNum, senderInfo)
                 else
                     AddMessage("system", msg)
+                    AldricBotAddon:Print("Unmatched system: " .. clean)
                 end
             end
         end
 
-    elseif event == "CHAT_MSG_ACHIEVEMENT" then
+    elseif event == "CHAT_MSG_ACHIEVEMENT" or event == "CHAT_MSG_GUILD_ACHIEVEMENT" then
         local msg, sender = ...
         if sender then
             local senderInfo = GetGuildMemberInfo(sender)

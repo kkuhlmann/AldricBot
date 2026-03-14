@@ -192,17 +192,24 @@ def test_help_any_channel(handler, make_msg, default_ctx, mock_send_chat, msg_ty
     assert any(prefix in str(call) for call in sent)
 
 
-# ── Forget self (whisper only) ───────────────────────────────────
+# ── Forget self (any channel) ────────────────────────────────────
 
 
-def test_forget_self_with_memory(handler, make_msg, default_ctx, mock_send_chat, seed_guildmate):
+@pytest.mark.parametrize("msg_type,prefix", [
+    ("guild", "/g "),
+    ("party", "/p "),
+    ("raid", "/ra "),
+    ("whisper", "/w Fenwick "),
+])
+def test_forget_self_with_memory(handler, make_msg, default_ctx, mock_send_chat, seed_guildmate, msg_type, prefix):
     seed_guildmate("Fenwick", summary="A warrior friend.")
-    msg = make_msg("whisper", "Fenwick", "Hey Aldric, forget about me")
+    msg = make_msg(msg_type, "Fenwick", "Hey Aldric, forget about me")
     result = handler.handle(msg, default_ctx)
     assert result == "ok"
     assert memory.load_guildmate("Fenwick") is None
     sent_texts = [str(c) for c in mock_send_chat.call_args_list]
     assert any("forgotten" in t for t in sent_texts)
+    assert any(prefix in str(call) for call in mock_send_chat.call_args_list)
 
 
 def test_forget_self_no_memory(handler, make_msg, default_ctx, mock_send_chat):
@@ -218,6 +225,14 @@ def test_forget_about_sender_name_triggers_self_forget(handler, make_msg, defaul
     msg = make_msg("whisper", "Fenwick", "Hey Aldric, forget about Fenwick")
     handler.handle(msg, default_ctx)
     assert memory.load_guildmate("Fenwick") is None
+
+
+def test_forget_self_does_not_call_claude(handler, make_msg, default_ctx, mock_send_chat, mock_claude, seed_guildmate):
+    """Forget self from guild chat should NOT invoke Claude."""
+    seed_guildmate("Fenwick", summary="A warrior.")
+    msg = make_msg("guild", "Fenwick", "Hey Aldric, forget about me")
+    handler.handle(msg, default_ctx)
+    mock_claude.mock.assert_not_called()
 
 
 # ── Permission model: non-admin ─────────────────────────────────

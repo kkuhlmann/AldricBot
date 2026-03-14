@@ -1,4 +1,4 @@
-"""Persona loading, CLAUDE.md rendering, and emote/response accessors."""
+"""Persona loading, persona prompt rendering, and emote/response accessors."""
 
 from __future__ import annotations
 
@@ -32,16 +32,16 @@ def render_claude_md(
     template_path: str | Path | None = None,
     output_path: str | Path | None = None,
 ) -> str:
-    """Render CLAUDE.md.j2 with persona data and write to output_path.
+    """Render persona_prompt.md.j2 with persona data and write to output_path.
 
     Returns the rendered text.
     """
     if template_path is None:
-        template_path = _PROJECT_ROOT / "CLAUDE.md.j2"
+        template_path = _PROJECT_ROOT / "persona_prompt.md.j2"
     template_path = Path(template_path)
 
     if output_path is None:
-        output_path = _PROJECT_ROOT / "CLAUDE.md"
+        output_path = _PROJECT_ROOT / "persona_prompt.md"
     output_path = Path(output_path)
 
     env = Environment(
@@ -128,10 +128,10 @@ def get_levelup_reactions(persona: dict | None) -> list[str]:
 # ── CLI entry point ────────────────────────────────────────────
 
 def main() -> None:
-    """Render CLAUDE.md from a persona file (CLI entry point)."""
+    """Render persona prompt from a persona file (CLI entry point)."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Render CLAUDE.md from a persona YAML")
+    parser = argparse.ArgumentParser(description="Render persona prompt from a persona YAML")
     parser.add_argument(
         "--persona",
         required=True,
@@ -140,18 +140,18 @@ def main() -> None:
     parser.add_argument(
         "--template",
         default=None,
-        help="Path to CLAUDE.md.j2 template (default: project root)",
+        help="Path to Jinja2 template (default: persona_prompt.md.j2 in project root)",
     )
     parser.add_argument(
         "--output",
         default=None,
-        help="Output path for rendered CLAUDE.md (default: project root)",
+        help="Output path for rendered prompt (default: persona_prompt.md in project root)",
     )
     args = parser.parse_args()
 
     persona = load_persona(args.persona)
     rendered = render_claude_md(persona, args.template, args.output)
-    print(f"Rendered CLAUDE.md ({len(rendered)} chars) for persona '{persona['name']}'")
+    print(f"Rendered persona prompt ({len(rendered)} chars) for persona '{persona['name']}'")
 
 
 if __name__ == "__main__":

@@ -32,6 +32,7 @@ from aldricbot import calendar, config, input_control, lua_io, memory
 from aldricbot import persona as persona_mod
 from aldricbot.chat_handler import ChatHandler
 from aldricbot.events import (
+    PERSONA_PROMPT_PATH,
     AchievementHandler,
     EventContext,
     EventDispatcher,
@@ -285,6 +286,8 @@ def invoke_claude_proactive(
         cmd.append("--continue")
     else:
         _refresh_session()
+        if PERSONA_PROMPT_PATH.exists():
+            cmd.extend(["--system-prompt-file", str(PERSONA_PROMPT_PATH)])
     cmd.append(prompt)
 
     try:
@@ -360,7 +363,7 @@ def main():
         persona = persona_mod.load_persona(args.persona)
         # --character / ALDRICBOT_CHARACTER is the single source of truth for name
         persona["name"] = args.character
-        # Render CLAUDE.md from template
+        # Render persona prompt from template
         persona_mod.render_claude_md(persona)
         _log(f"Persona loaded: {args.character} ({args.persona})")
 

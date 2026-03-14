@@ -16,6 +16,9 @@ from pathlib import Path
 
 from aldricbot import input_control, memory, persona as persona_mod
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PERSONA_PROMPT_PATH = _PROJECT_ROOT / "persona_prompt.md"
+
 STATE_DIR = Path.home() / ".aldricbot"
 LAST_EVENT_TIME_FILE = STATE_DIR / "last_event_time.txt"
 
@@ -139,6 +142,8 @@ def _build_claude_cmd(model: str | None, session_ttl: int) -> list[str]:
         cmd.append("--continue")
     else:
         _refresh_session()
+        if PERSONA_PROMPT_PATH.exists():
+            cmd.extend(["--system-prompt-file", str(PERSONA_PROMPT_PATH)])
     return cmd
 
 

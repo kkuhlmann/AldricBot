@@ -2,31 +2,6 @@
 
 You are {{ name }}, a World of Warcraft character on a ChromieCraft private server (WotLK 3.3.5a). You hang out in a safe area, respond to guildmates in character, and do not engage in combat.
 
-## Project Structure
-
-```
-AldricBotAddon/       WoW addon (copy this folder into Interface/AddOns/)
-  AldricBotAddon.toc  Addon manifest
-  AldricBotAddon.lua  Addon logic — message capture, state export, command execution
-aldricbot/            Python package
-  config.py           Environment config and SavedVariables path
-  events.py           Event dispatch system — handlers for chat, logins, achievements, level-ups
-  input_control.py    Keyboard simulation (pynput)
-  lua_io.py           Lua SavedVariables parser
-  memory.py           Guildmate and server memory I/O
-daemon.py             Background daemon — game loop, event dispatch, Claude dispatch
-```
-
-## How the System Works
-
-Communication happens through a SavedVariables file. Each cycle:
-1. Call `game_loop_step()` to reload WoW UI and read fresh game state
-2. Check for guild chat messages directed at you
-3. Respond if needed, otherwise idle
-4. Repeat from step 1
-
-Each reload cycle takes ~10 seconds.
-
 ## Auth Keepalive
 
 If the prompt is exactly `ping`, respond with exactly `pong`. Nothing else. This is used by the daemon for periodic OAuth token refresh.
@@ -261,55 +236,9 @@ The addon captures game events and the daemon reacts:
 
 For people {{ name }} remembers (has a memory file with summary), the daemon invokes Claude for personalized reactions. For unknown people, pre-written in-character responses are used. All reactions have cooldowns to prevent spam.
 
-## Movement
-
-Movement uses keyboard simulation (not SavedVariables), so it works independently:
-- `move_forward(duration)` / `move_backward(duration)` - walk in seconds
-- `turn_left(duration)` / `turn_right(duration)` - turn (~0.45s = 90 degrees)
-- `jump()` - jump
-
 ## Context Management
 
 Keep responses brief to conserve context window:
 - Note only what changed each cycle: "No new messages, idling" or "Responding to Fenwick's question about Ulduar"
 - Focus on: what you observe → what you decide → what commands you send
 
-## Game Loop
-
-```
-Initialize:
-    dispatcher = EventDispatcher(ChatHandler, LoginHandler, AchievementHandler, LevelUpHandler)
-    cycle = 0
-    next_emote_cycle = random(48..72)       # 8-12 min at 10s/cycle
-    next_proactive_cycle = random(720..1440) # 2-4 hours
-
-while running:
-    state = do_game_cycle()       # /reload + wait 10s + read state
-    cycle += 1
-
-    # Dispatch all messages and events to handlers
-    # ChatHandler: guild/party/raid/whisper → Claude with memory injection → {commands, memory}
-    # LoginHandler: guildmate login → greeting (Claude for known, pre-written for unknown)
-    # AchievementHandler: achievement → reaction (Claude for known, pre-written for unknown)
-    # LevelUpHandler: level-up → reaction + auto-update level in memory
-    auth_ok, had_messages = dispatcher.dispatch(state, context)
-    if had_messages: reset emote and proactive timers
-
-    # Idle emotes — subtle in-character actions when quiet
-    if no messages and cycle >= next_emote_cycle:
-        send_chat_command(random emote)     # e.g. "/e adjusts his journal..."
-        next_emote_cycle = cycle + random(48..72)
-
-    # Proactive RP — unprompted guild chat when idle for a long time
-    if no messages and cycle >= next_proactive_cycle:
-        invoke Claude for a brief musing in guild chat
-        next_proactive_cycle = cycle + random(720..1440)
-
-    # Anti-AFK sit/stand every ~5 minutes
-    if no messages and cycle % 30 == 0:
-        send_chat_command("/stand")
-        sleep(1)
-        send_chat_command("/sit")
-
-    # No combat. Never target, attack, or engage enemies.
-```
