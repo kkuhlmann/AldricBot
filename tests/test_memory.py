@@ -274,14 +274,14 @@ def test_disposition_boundary_hostile():
 
 
 def test_decay_positive_score():
-    data = {"friendliness": 4.0, "last_seen": "2026-03-08"}
+    data = {"friendliness": 4.0, "last_seen": "2026-03-09"}
     # 4 days inactive → 4 * 0.25 = 1.0 decay
     score = memory.apply_friendliness_decay(data)
     assert score == 3.0
 
 
 def test_decay_negative_score():
-    data = {"friendliness": -4.0, "last_seen": "2026-03-08"}
+    data = {"friendliness": -4.0, "last_seen": "2026-03-09"}
     # 4 days inactive → 4 * 0.25 = 1.0 decay toward 0
     score = memory.apply_friendliness_decay(data)
     assert score == -3.0
@@ -311,6 +311,57 @@ def test_decay_missing_friendliness():
     data = {"last_seen": "2026-03-01"}
     score = memory.apply_friendliness_decay(data)
     assert score == 0.0
+
+
+# ── Daily friendliness cap ────────────────────────────────────────
+
+
+def test_daily_cap_scales_delta():
+    """Raw delta is scaled by 0.25 (e.g. +2 → +0.5)."""
+    gm = {}
+    effective = memory.clamp_daily_friendliness_delta(gm, 2)
+    assert effective == 0.5
+
+
+def test_daily_cap_negative_scales():
+    """Negative raw delta is scaled (e.g. -1 → -0.25)."""
+    gm = {}
+    effective = memory.clamp_daily_friendliness_delta(gm, -1)
+    assert effective == -0.25
+
+
+def test_daily_cap_blocks_after_limit():
+    """After ±1.0 accumulated, further same-direction deltas return 0."""
+    gm = {}
+    memory.clamp_daily_friendliness_delta(gm, 2)  # +0.5
+    memory.clamp_daily_friendliness_delta(gm, 2)  # +0.5, total = 1.0
+    effective = memory.clamp_daily_friendliness_delta(gm, 2)  # capped
+    assert effective == 0.0
+
+
+def test_daily_cap_partial_remainder():
+    """When partially capped, only the remaining budget is returned."""
+    gm = {}
+    memory.clamp_daily_friendliness_delta(gm, 2)  # +0.5
+    memory.clamp_daily_friendliness_delta(gm, 1)  # +0.25, total = 0.75
+    effective = memory.clamp_daily_friendliness_delta(gm, 2)  # wants +0.5, only 0.25 left
+    assert effective == 0.25
+
+
+def test_daily_cap_resets_on_new_day():
+    """A new date resets the daily accumulation."""
+    gm = {"friendliness_daily_delta": 1.0, "friendliness_daily_date": "2020-01-01"}
+    effective = memory.clamp_daily_friendliness_delta(gm, 2)
+    assert effective == 0.5  # reset, full budget available
+
+
+def test_daily_cap_opposite_direction_still_works():
+    """Positive cap doesn't block negative deltas."""
+    gm = {}
+    memory.clamp_daily_friendliness_delta(gm, 2)  # +0.5
+    memory.clamp_daily_friendliness_delta(gm, 2)  # +0.5, total = 1.0
+    effective = memory.clamp_daily_friendliness_delta(gm, -2)  # -0.5
+    assert effective == -0.5  # net daily becomes 0.5
 
 
 # ── Nicknames ────────────────────────────────────────────────────

@@ -424,7 +424,7 @@ class ChatHandler(EventHandler):
             _send_commands(commands)
             _log(f"Sent {len(commands)} chat commands")
 
-        # Update friendliness score
+        # Update friendliness score (scaled + daily-capped)
         friendliness_delta = parsed.get("friendliness", 0)
         try:
             delta = int(friendliness_delta)
@@ -432,8 +432,10 @@ class ChatHandler(EventHandler):
         except (ValueError, TypeError):
             delta = 0
         if delta != 0:
-            new_score = guildmate.get("friendliness", 0.0) + delta
-            guildmate["friendliness"] = max(-10.0, min(10.0, new_score))
+            effective = memory.clamp_daily_friendliness_delta(guildmate, delta)
+            if effective != 0:
+                new_score = guildmate.get("friendliness", 0.0) + effective
+                guildmate["friendliness"] = max(-10.0, min(10.0, new_score))
 
         # Update nickname (only for Familiar+ tiers)
         nickname_update = parsed.get("nickname")

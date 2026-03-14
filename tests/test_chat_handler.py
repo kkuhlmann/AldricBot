@@ -476,33 +476,33 @@ def test_disposition_not_injected_when_neutral(handler, make_msg, default_ctx, m
 
 
 def test_friendliness_delta_applied(handler, make_msg, default_ctx, mock_send_chat, mock_claude, seed_guildmate):
-    """Claude's friendliness delta is applied and saved."""
+    """Claude's friendliness delta is scaled (×0.25) and saved."""
     seed_guildmate("Fenwick", summary="A warrior.", friendliness=0.0, last_seen="2026-03-12")
     mock_claude(stdout=json.dumps({"commands": ["/g Aye."], "memory": None, "friendliness": 2}))
     msg = make_msg("guild", "Fenwick", "Hey Aldric, hello")
     handler.handle(msg, default_ctx)
     gm = memory.load_guildmate("Fenwick")
-    assert gm["friendliness"] == 2.0
+    assert gm["friendliness"] == 0.5  # raw 2 × 0.25 = 0.5
 
 
 def test_friendliness_clamped_at_boundaries(handler, make_msg, default_ctx, mock_send_chat, mock_claude, seed_guildmate):
     """Score is clamped to [-10, +10]."""
-    seed_guildmate("Fenwick", summary="A warrior.", friendliness=9.0, last_seen="2026-03-12")
+    seed_guildmate("Fenwick", summary="A warrior.", friendliness=9.8, last_seen="2026-03-12")
     mock_claude(stdout=json.dumps({"commands": ["/g Aye."], "memory": None, "friendliness": 2}))
     msg = make_msg("guild", "Fenwick", "Hey Aldric, hello")
     handler.handle(msg, default_ctx)
     gm = memory.load_guildmate("Fenwick")
-    assert gm["friendliness"] == 10.0
+    assert gm["friendliness"] == 10.0  # 9.8 + 0.5 = 10.3, clamped to 10.0
 
 
 def test_friendliness_delta_clamped(handler, make_msg, default_ctx, mock_send_chat, mock_claude, seed_guildmate):
-    """Delta from Claude is clamped to [-2, +2] even if larger."""
+    """Delta from Claude is clamped to [-2, +2] then scaled (×0.25)."""
     seed_guildmate("Fenwick", summary="A warrior.", friendliness=0.0, last_seen="2026-03-12")
     mock_claude(stdout=json.dumps({"commands": ["/g Aye."], "memory": None, "friendliness": 5}))
     msg = make_msg("guild", "Fenwick", "Hey Aldric, hello")
     handler.handle(msg, default_ctx)
     gm = memory.load_guildmate("Fenwick")
-    assert gm["friendliness"] == 2.0
+    assert gm["friendliness"] == 0.5  # raw 5 → clamped 2 → scaled 0.5
 
 
 def test_friendliness_backward_compatible(handler, make_msg, default_ctx, mock_send_chat, mock_claude, seed_guildmate):
@@ -512,7 +512,19 @@ def test_friendliness_backward_compatible(handler, make_msg, default_ctx, mock_s
     msg = make_msg("guild", "Fenwick", "Hey Aldric, hello")
     handler.handle(msg, default_ctx)
     gm = memory.load_guildmate("Fenwick")
-    assert gm["friendliness"] == -1.0
+    assert gm["friendliness"] == -0.25  # raw -1 × 0.25 = -0.25
+
+
+def test_friendliness_daily_cap(handler, make_msg, default_ctx, mock_send_chat, mock_claude, seed_guildmate):
+    """Repeated interactions in the same day are capped at ±1.0 total."""
+    seed_guildmate("Fenwick", summary="A warrior.", friendliness=0.0, last_seen="2026-03-12")
+    mock_claude(stdout=json.dumps({"commands": ["/g Aye."], "memory": None, "friendliness": 2}))
+    # Three interactions, each returning +2 (scaled to +0.5 each)
+    for _ in range(3):
+        msg = make_msg("guild", "Fenwick", "Hey Aldric, hello")
+        handler.handle(msg, default_ctx)
+    gm = memory.load_guildmate("Fenwick")
+    assert gm["friendliness"] == 1.0  # 0.5 + 0.5 = 1.0 (cap), third has no effect
 
 
 # ── Self-memory ─────────────────────────────────────────────────

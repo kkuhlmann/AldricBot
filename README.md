@@ -1,6 +1,6 @@
 # AldricBot
 
-An AI-powered RP companion for World of Warcraft (ChromieCraft WotLK 3.3.5a). Aldric is a grizzled human paladin and chronicler who hangs out in town, chats with guildmates in character, and remembers everyone he meets — powered by Claude.
+An AI-powered RP companion for World of Warcraft (ChromieCraft WotLK 3.3.5a). Create a fully customizable in-character bot that chats with guildmates, remembers everyone it meets, reacts to logins and achievements, and idles with personality — all powered by Claude. Ships with Aldric, a grizzled human paladin chronicler, but you can build any persona you want.
 
 ## Talking to Aldric
 
@@ -21,20 +21,20 @@ Aldric responds in the same channel you used — guild chat replies go to guild,
 Whisper him anything — no "Hey Aldric" prefix needed:
 
 ```
-/w Aldric What was the fall of Lordaeron like?
+/w What was the fall of Lordaeron like?
 ```
 
 He'll whisper back.
 
 ### What He Can Talk About
 
-- **WoW questions** — lore, NPCs, items, recipes, drop rates, quests, boss mechanics, strategy. He looks things up in real time and answers as firsthand knowledge: *"Aye, I have seen that fire claim entire raid groups..."*
+- **WoW questions** — lore, NPCs, items, recipes, drop rates, quests, boss mechanics, strategy. He looks things up in real time and answers as firsthand knowledge: _"Aye, I have seen that fire claim entire raid groups..."_
 - **His backstory** — Second War veteran, Silver Hand paladin, survivor of Lordaeron's fall, marched to Mount Hyjal. Ask him about his scars, his knee, Uther, Arthas, or Tirion.
-- **Out-of-scope topics** — real-world questions, math, etc. He'll deflect in character: *"I am no arithmetician, friend."*
+- **Out-of-scope topics** — real-world questions, math, etc. He'll deflect in character: _"I am no arithmetician, friend."_
 
 ### Response Time
 
-Aldric checks for new messages every ~10 seconds. When he picks up your message, you'll see a thinking emote (like *adjusts his journal* or *narrows his eyes, recalling something from long ago*) before his reply arrives.
+Aldric checks for new messages every ~10 seconds. When he picks up your message, you'll see a thinking emote (like _adjusts his journal_ or _narrows his eyes, recalling something from long ago_) before his reply arrives.
 
 ## Memory
 
@@ -42,13 +42,21 @@ Aldric remembers everyone he talks to — across sessions, across days. He build
 
 Memory persists regardless of guild membership. If you've ever spoken to Aldric, he knows you.
 
+If you'd rather not engage with Aldric, no worries — he won't keep any memory of you unless you talk to him directly. Logins, achievements, and level-ups may get a generic reaction, but he won't store anything about you until you start a conversation.
+
 ### Relationship Depth
 
 The more you talk to Aldric, the better he knows you. His familiarity grows over time from **Stranger** to **Acquaintance** to **Familiar** to **Well-known**. Higher tiers let Aldric recall more detail about you in conversation — a stranger gets a generic introduction, while a well-known friend gets references to shared history, past jokes, and things you've told him.
 
+### Nicknames
+
+Once you reach **Familiar** tier or above, Aldric may give you a nickname — a short, in-character label like "the Scholar", "young one", or "Ironside". Nicknames are based on things Aldric has observed: your class, personality, shared experiences, or running jokes. He uses them naturally in conversation (not every sentence) and may update them over time as the relationship develops.
+
+Strangers and acquaintances never receive nicknames. Once assigned, a nickname persists unless Aldric decides to change it.
+
 ### Disposition
 
-Separate from how well Aldric *knows* you, he also tracks how he *feels* about you. His disposition ranges from **Hostile** to **Fond** and shifts based on how you treat him — be friendly and he warms up, be rude and he grows cold. A hostile person might get *"You test my patience, and you have long since exhausted it"*, while a fond friend gets personal stories and familiar address.
+Separate from how well Aldric _knows_ you, he also tracks how he _feels_ about you. His disposition ranges from **Hostile** to **Fond** and shifts based on how you treat him — be friendly and he warms up, be rude and he grows cold. A hostile person might get _"You test my patience, and you have long since exhausted it"_, while a fond friend gets personal stories and familiar address.
 
 The two axes are independent — Aldric can know someone very well and still be cold toward them, or meet a stranger with neutral warmth.
 
@@ -60,32 +68,32 @@ The "Hey Aldric" prefix is required for guild, party, and raid chat. For whisper
 
 ### From Any Channel (Guild, Party, Raid, or Whisper)
 
-| Command | What it does |
-|---------|-------------|
-| `Hey Aldric, remember that [fact]` | Stores a shared fact (e.g., "the guild is raiding ICC on Thursday at 8pm") |
-| `Hey Aldric, don't forget that [fact]` | Same as above |
-| `Hey Aldric, forget that [fact]` | Removes a stored fact (Aldric figures out which one you mean) |
-| `Hey Aldric, tell me about myself` | Shows what Aldric knows about you (class, level, times spoken, his notes) |
-| `Hey Aldric, tell me the world facts` | Lists all stored server facts |
-| `Hey Aldric, help` | Lists available commands |
+| Command                                | What it does                                                               |
+| -------------------------------------- | -------------------------------------------------------------------------- |
+| `Hey Aldric, remember that [fact]`     | Stores a shared fact (e.g., "the guild is raiding ICC on Thursday at 8pm") |
+| `Hey Aldric, don't forget that [fact]` | Same as above                                                              |
+| `Hey Aldric, forget that [fact]`       | Removes a stored fact (Aldric figures out which one you mean)              |
+| `Hey Aldric, tell me about myself`     | Shows what Aldric knows about you (class, level, times spoken, his notes)  |
+| `Hey Aldric, tell me the world facts`  | Lists all stored server facts                                              |
+| `Hey Aldric, help`                     | Lists available commands                                                   |
 
 ### Whisper Only
 
-| Command | What it does |
-|---------|-------------|
-| `Hey Aldric, forget about me` | Erases all of Aldric's memory of you |
-| `Hey Aldric, forget everything about me` | Same as above |
-| `Hey Aldric, forget about [your name]` | Same as above (using your character name) |
+| Command                                  | What it does                              |
+| ---------------------------------------- | ----------------------------------------- |
+| `Hey Aldric, forget about me`            | Erases all of Aldric's memory of you      |
+| `Hey Aldric, forget everything about me` | Same as above                             |
+| `Hey Aldric, forget about [your name]`   | Same as above (using your character name) |
 
 ### Admin Only (Whisper)
 
 These require the bot operator to have configured an admin character. If you're the admin:
 
-| Command | What it does |
-|---------|-------------|
-| `Hey Aldric, forget about [name]` | Erases Aldric's memory of another person |
-| `Hey Aldric, forget everything` | Erases all guildmate memories (server facts are kept) |
-| `Hey Aldric, forget all facts` | Erases all server memory facts |
+| Command                           | What it does                                          |
+| --------------------------------- | ----------------------------------------------------- |
+| `Hey Aldric, forget about [name]` | Erases Aldric's memory of another person              |
+| `Hey Aldric, forget everything`   | Erases all guildmate memories (server facts are kept) |
+| `Hey Aldric, forget all facts`    | Erases all server memory facts                        |
 
 **Server facts** are shared knowledge — things like raid schedules, respec announcements, or guild news. Aldric references them naturally in conversation when relevant. Up to 20 facts can be stored at a time.
 
@@ -138,31 +146,31 @@ The persona YAML defines the character (name, race, class, backstory, emotes, et
 
 Required fields:
 
-| Field | Description |
-|-------|-------------|
-| `race` | Character race (e.g., Human, Dwarf) |
+| Field   | Description                           |
+| ------- | ------------------------------------- |
+| `race`  | Character race (e.g., Human, Dwarf)   |
 | `class` | Character class (e.g., Paladin, Mage) |
 
 Optional fields:
 
-| Field | Description |
-|-------|-------------|
-| `name` | Character name |
-| `age` | Character age |
-| `build` | Physical description |
-| `scars` | Scars and visible marks |
-| `eyes` | Eye description |
-| `speaking_style` | How the character talks |
-| `backstory` | List of `{title, text}` entries |
-| `personality_anchors` | List of behavioral quirks |
-| `emotes.idle` | Idle emote strings |
-| `emotes.seasonal` | Seasonal emotes keyed by season/event name |
-| `emotes.thinking` | Thinking emotes shown before replies |
-| `emotes.auth_down` | In-character auth-failure messages |
-| `emotes.farewell` | Farewell emote on shutdown |
-| `responses.login_greetings` | Pre-written login greetings (use `{name}` placeholder) |
-| `responses.achievement_reactions` | Pre-written achievement reactions |
-| `responses.levelup_reactions` | Pre-written level-up reactions |
+| Field                             | Description                                            |
+| --------------------------------- | ------------------------------------------------------ |
+| `name`                            | Character name                                         |
+| `age`                             | Character age                                          |
+| `build`                           | Physical description                                   |
+| `scars`                           | Scars and visible marks                                |
+| `eyes`                            | Eye description                                        |
+| `speaking_style`                  | How the character talks                                |
+| `backstory`                       | List of `{title, text}` entries                        |
+| `personality_anchors`             | List of behavioral quirks                              |
+| `emotes.idle`                     | Idle emote strings                                     |
+| `emotes.seasonal`                 | Seasonal emotes keyed by season/event name             |
+| `emotes.thinking`                 | Thinking emotes shown before replies                   |
+| `emotes.auth_down`                | In-character auth-failure messages                     |
+| `emotes.farewell`                 | Farewell emote on shutdown                             |
+| `responses.login_greetings`       | Pre-written login greetings (use `{name}` placeholder) |
+| `responses.achievement_reactions` | Pre-written achievement reactions                      |
+| `responses.levelup_reactions`     | Pre-written level-up reactions                         |
 
 See [personas/aldric.yaml](personas/aldric.yaml) for a complete example.
 
@@ -202,6 +210,7 @@ uv run python -m aldricbot.persona \
 ### Install
 
 1. Copy the addon into your WoW addons directory:
+
    ```
    cp -r AldricBotAddon/ /path/to/WoW/Interface/AddOns/
    ```
@@ -223,13 +232,13 @@ uv run python daemon.py
 
 Optional flags:
 
-| Flag | Env var | Default | Description |
-|------|---------|---------|-------------|
-| `--model {opus,sonnet,haiku}` | `ALDRICBOT_MODEL` | haiku | Claude model to use |
-| `--session-ttl N` | `ALDRICBOT_SESSION_TTL` | 24 | Hours before conversation context resets |
-| `--admin NAME` | `ALDRICBOT_ADMIN` | *(none)* | Character name that can use admin commands |
-| `--character NAME` | `ALDRICBOT_CHARACTER` | `Aldric` | Character name for greeting prefix and memory isolation |
-| `--persona PATH` | `ALDRICBOT_PERSONA` | *(none)* | Path to persona YAML file |
+| Flag                          | Env var                 | Default  | Description                                             |
+| ----------------------------- | ----------------------- | -------- | ------------------------------------------------------- |
+| `--model {opus,sonnet,haiku}` | `ALDRICBOT_MODEL`       | haiku    | Claude model to use                                     |
+| `--session-ttl N`             | `ALDRICBOT_SESSION_TTL` | 24       | Hours before conversation context resets                |
+| `--admin NAME`                | `ALDRICBOT_ADMIN`       | _(none)_ | Character name that can use admin commands              |
+| `--character NAME`            | `ALDRICBOT_CHARACTER`   | `Aldric` | Character name for greeting prefix and memory isolation |
+| `--persona PATH`              | `ALDRICBOT_PERSONA`     | _(none)_ | Path to persona YAML file                               |
 
 ### Stop
 
@@ -237,7 +246,7 @@ Optional flags:
 kill $(cat ~/.aldricbot/daemon.lock)
 ```
 
-Aldric will send a farewell emote before exiting: *closes his journal, tucks it beneath his arm, and walks slowly into the distance.*
+Aldric will send a farewell emote before exiting: _closes his journal, tucks it beneath his arm, and walks slowly into the distance._
 
 ## Project Structure
 
