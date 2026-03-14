@@ -130,17 +130,17 @@ Both timers reset whenever someone talks to him.
 
 ## Persona System
 
-AldricBot uses a **persona YAML file** and a **Jinja2 template** to generate the `CLAUDE.md` that drives the bot's personality. This means you can create entirely different characters without editing `CLAUDE.md` directly.
+AldricBot uses a **persona YAML file** and a **Jinja2 template** to generate `persona_prompt.md` — the system prompt that drives the bot's personality at runtime. This means you can create entirely different characters without editing the prompt template directly.
 
 ### How It Works
 
 ```
 personas/aldric.yaml  ──┐
-                        ├──▶  persona.py  ──▶  CLAUDE.md
-CLAUDE.md.j2  ──────────┘
+                        ├──▶  persona.py  ──▶  persona_prompt.md
+persona_prompt.md.j2  ──┘
 ```
 
-The persona YAML defines the character (name, race, class, backstory, emotes, etc.). The Jinja2 template (`CLAUDE.md.j2`) contains the bot's behavior rules with `{{ name }}`, `{{ race }}`, etc. placeholders. Running `render_claude_md()` combines them into a final `CLAUDE.md`.
+The persona YAML defines the character (name, race, class, backstory, emotes, etc.). The Jinja2 template (`persona_prompt.md.j2`) contains the bot's behavior rules with `{{ name }}`, `{{ race }}`, etc. placeholders. Running `render_claude_md()` combines them into a final `persona_prompt.md`, which is passed to `claude -p` via `--system-prompt-file`.
 
 ### Persona YAML Structure
 
@@ -181,7 +181,7 @@ Class-specific speaking styles live in [personas/class_personalities.yaml](perso
 ### Creating a Custom Persona
 
 1. Copy `personas/aldric.yaml` and edit it with your character's details
-2. Render `CLAUDE.md`:
+2. Render the persona prompt:
    ```
    uv run python -m aldricbot.persona --persona personas/your_character.yaml
    ```
@@ -192,8 +192,8 @@ Class-specific speaking styles live in [personas/class_personalities.yaml](perso
 ```
 uv run python -m aldricbot.persona \
   --persona personas/your_character.yaml \
-  --template CLAUDE.md.j2 \
-  --output CLAUDE.md
+  --template persona_prompt.md.j2 \
+  --output persona_prompt.md
 ```
 
 `--template` and `--output` default to the project root.
@@ -262,13 +262,13 @@ aldricbot/            Python package
   input_control.py    Keyboard simulation (pynput)
   lua_io.py           Lua SavedVariables parser
   memory.py           Guildmate and server memory I/O
-  persona.py          Persona loading, CLAUDE.md rendering, emote/response accessors
+  persona.py          Persona loading, persona prompt rendering, emote/response accessors
 personas/             Character persona definitions
   aldric.yaml         Default persona — Aldric the paladin chronicler
   class_personalities.yaml  Class-specific speaking styles
 tests/                Test suite
 daemon.py             Background daemon — game loop, event dispatch, Claude dispatch
-CLAUDE.md             Character persona and behavior instructions (generated from template)
-CLAUDE.md.j2          Jinja2 template for CLAUDE.md
+CLAUDE.md             Developer instructions for Claude Code (not used at runtime)
+persona_prompt.md.j2  Jinja2 template for persona prompt (rendered to persona_prompt.md)
 .env.sample           Environment variable reference
 ```

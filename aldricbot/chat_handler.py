@@ -214,14 +214,15 @@ class ChatHandler(EventHandler):
             if action == "help":
                 self._handle_help(sender, msg_type)
                 return "ok"
+            # Self-forget — available from any channel
+            if action == "forget_self":
+                self._handle_self_forget(sender, msg_type)
+                return "ok"
+            if action == "forget_guildmate" and parsed[1].lower() == sender.lower():
+                self._handle_self_forget(sender, msg_type)
+                return "ok"
             # All other commands — whisper only
             if msg_type == "whisper":
-                if action == "forget_self":
-                    self._handle_self_forget(sender)
-                    return "ok"
-                if action == "forget_guildmate" and parsed[1].lower() == sender.lower():
-                    self._handle_self_forget(sender)
-                    return "ok"
                 # Admin commands
                 if ctx.admin_name and sender == ctx.admin_name:
                     return self._handle_admin(parsed, sender, ctx)
@@ -505,17 +506,18 @@ class ChatHandler(EventHandler):
         _send_response(msg_type, sender, '"Help" — this list.')
         _log(f"Sent help to {sender} via {msg_type}")
 
-    def _handle_self_forget(self, sender: str) -> None:
+    def _handle_self_forget(self, sender: str, msg_type: str = "whisper") -> None:
         """Delete the sender's own memory."""
         deleted = memory.delete_guildmate(sender)
         if deleted:
-            _send_whisper(
+            _send_response(
+                msg_type,
                 sender,
                 "It is done. All that was between us is forgotten, as though we had never spoken.",
             )
             _log(f"Self-forget: deleted memory for {sender}")
         else:
-            _send_whisper(sender, "I have no memory of you to forget, friend.")
+            _send_response(msg_type, sender, "I have no memory of you to forget, friend.")
             _log(f"Self-forget: no memory found for {sender}")
 
     def _handle_about_self(self, sender: str, msg_type: str) -> None:

@@ -1,4 +1,4 @@
-"""Tests for aldricbot.persona — YAML loading, CLAUDE.md rendering, and accessors."""
+"""Tests for aldricbot.persona — YAML loading, persona prompt rendering, and accessors."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from aldricbot import persona as persona_mod
 # Path to the real Aldric persona in the repo
 PERSONAS_DIR = Path(__file__).resolve().parent.parent / "personas"
 ALDRIC_YAML = PERSONAS_DIR / "aldric.yaml"
-TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "CLAUDE.md.j2"
+TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "persona_prompt.md.j2"
 
 
 # ── Fixtures ──────────────────────────────────────────────────
