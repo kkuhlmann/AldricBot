@@ -119,6 +119,8 @@ DISPOSITION_TIERS = [
 ]
 
 FRIENDLINESS_DECAY_PER_DAY = 0.25
+FRIENDLINESS_DAILY_CAP = 1.0
+FRIENDLINESS_INTERACTION_SCALE = 0.25  # Claude's -2..+2 → -0.5..+0.5
 
 
 def get_disposition_tier(score: float) -> tuple[str, str]:
@@ -163,6 +165,31 @@ def apply_friendliness_decay(data: dict) -> float:
         score = min(0.0, score + decay)
 
     return score
+
+
+def clamp_daily_friendliness_delta(guildmate: dict, raw_delta: int) -> float:
+    """Scale and cap a friendliness delta against the daily budget.
+
+    Claude returns -2..+2 integers; we scale by FRIENDLINESS_INTERACTION_SCALE
+    and enforce a daily net-change cap of ±FRIENDLINESS_DAILY_CAP.
+
+    Mutates *guildmate* in-place (friendliness_daily_delta, friendliness_daily_date).
+    Returns the effective delta to apply to the friendliness score.
+    """
+    scaled = raw_delta * FRIENDLINESS_INTERACTION_SCALE
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    if guildmate.get("friendliness_daily_date") != today:
+        guildmate["friendliness_daily_delta"] = 0.0
+        guildmate["friendliness_daily_date"] = today
+
+    current = guildmate["friendliness_daily_delta"]
+    proposed = current + scaled
+    clamped = max(-FRIENDLINESS_DAILY_CAP, min(FRIENDLINESS_DAILY_CAP, proposed))
+    effective = clamped - current
+
+    guildmate["friendliness_daily_delta"] = clamped
+    return effective
 
 
 # ── Relationship tiers ─────────────────────────────────────────────
