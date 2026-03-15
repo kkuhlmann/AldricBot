@@ -31,6 +31,7 @@ from pathlib import Path
 from aldricbot import calendar, config, input_control, lua_io, memory
 from aldricbot import persona as persona_mod
 from aldricbot.chat_handler import ChatHandler
+from aldricbot.trade_handler import TradeHandler
 from aldricbot.events import (
     PERSONA_PROMPT_PATH,
     AchievementHandler,
@@ -324,6 +325,7 @@ def invoke_claude_proactive(
     return True
 
 
+
 def _random_emote_delay():
     return random.randint(IDLE_EMOTE_MIN_CYCLES, IDLE_EMOTE_MAX_CYCLES)
 
@@ -396,6 +398,7 @@ def main():
     dispatcher.register(LoginHandler())
     dispatcher.register(AchievementHandler())
     dispatcher.register(LevelUpHandler())
+    dispatcher.register(TradeHandler())
     dispatcher.load_timestamps()
 
     cycle = 0

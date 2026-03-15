@@ -1,5 +1,8 @@
 """Tests for aldricbot.memory — guildmate and server memory I/O."""
 
+from datetime import datetime
+from unittest.mock import patch
+
 from aldricbot import memory
 
 
@@ -273,14 +276,20 @@ def test_disposition_boundary_hostile():
 # ── Friendliness decay ────────────────────────────────────────
 
 
-def test_decay_positive_score():
+@patch("aldricbot.memory.datetime")
+def test_decay_positive_score(mock_dt):
+    mock_dt.now.return_value = datetime(2026, 3, 13)
+    mock_dt.strptime = datetime.strptime
     data = {"friendliness": 4.0, "last_seen": "2026-03-09"}
     # 4 days inactive → 4 * 0.25 = 1.0 decay
     score = memory.apply_friendliness_decay(data)
     assert score == 3.0
 
 
-def test_decay_negative_score():
+@patch("aldricbot.memory.datetime")
+def test_decay_negative_score(mock_dt):
+    mock_dt.now.return_value = datetime(2026, 3, 13)
+    mock_dt.strptime = datetime.strptime
     data = {"friendliness": -4.0, "last_seen": "2026-03-09"}
     # 4 days inactive → 4 * 0.25 = 1.0 decay toward 0
     score = memory.apply_friendliness_decay(data)
@@ -379,3 +388,142 @@ def test_get_nickname_missing():
 
 def test_get_nickname_no_memory():
     assert memory.get_nickname("Nobody") is None
+
+
+# ── Hide and Seek ────────────────────────────────────────────
+
+
+def test_load_hide_and_seek_default():
+    result = memory.load_hide_and_seek()
+    assert result == {"active": False, "finders": []}
+
+
+def test_set_hide_and_seek_active(monkeypatch):
+    monkeypatch.setattr("aldricbot.input_control.send_chat_command", lambda cmd: None)
+    result = memory.set_hide_and_seek_active(True, "AdminGuy", 500)
+    assert result["active"] is True
+    assert result["activated_by"] == "AdminGuy"
+    assert result["reward_gold"] == 500
+    assert result["current_reward"] == 500
+    assert result["hint_count"] == 0
+    assert result["hints"] == []
+
+
+def test_set_hide_and_seek_active_preserves_finders(monkeypatch):
+    monkeypatch.setattr("aldricbot.input_control.send_chat_command", lambda cmd: None)
+    # Record a finder first
+    memory.save_hide_and_seek({
+        "active": False,
+        "finders": [{"name": "Fenwick", "found_at": "2026-03-13T14:00:00", "gold_given": 400}],
+    })
+    result = memory.set_hide_and_seek_active(True, "AdminGuy", 500)
+    assert len(result["finders"]) == 1
+    assert result["finders"][0]["name"] == "Fenwick"
+
+
+def test_set_hide_and_seek_active_resets_hints(monkeypatch):
+    monkeypatch.setattr("aldricbot.input_control.send_chat_command", lambda cmd: None)
+    memory.save_hide_and_seek({
+        "active": True, "finders": [], "hints": ["old hint"],
+        "hint_count": 3, "reward_gold": 500, "current_reward": 400,
+    })
+    result = memory.set_hide_and_seek_active(True, "AdminGuy", 600)
+    assert result["hints"] == []
+    assert result["hint_count"] == 0
+    assert result["reward_gold"] == 600
+
+
+def test_record_finder():
+    memory.save_hide_and_seek({"active": True, "finders": [], "reward_gold": 500, "current_reward": 450})
+    result = memory.record_finder("Fenwick", 450)
+    assert result["active"] is False
+    assert len(result["finders"]) == 1
+    assert result["finders"][0]["name"] == "Fenwick"
+    assert result["finders"][0]["gold_given"] == 450
+
+
+def test_increment_hint_count_first_hint(monkeypatch):
+    """First hint — no decay."""
+    sent = []
+    monkeypatch.setattr("aldricbot.input_control.send_chat_command", lambda cmd: sent.append(cmd))
+    memory.save_hide_and_seek({"active": True, "finders": [], "hint_count": 0, "reward_gold": 500, "current_reward": 500, "hints": []})
+    count = memory.increment_hint_count()
+    assert count == 1
+    data = memory.load_hide_and_seek()
+    assert data["current_reward"] == 500  # no decay on first hint
+    assert "5000000" in sent[-1]  # 500 * 10000
+
+
+def test_increment_hint_count_decay(monkeypatch):
+    """Hints 2-5 decay by 20% of original each."""
+    sent = []
+    monkeypatch.setattr("aldricbot.input_control.send_chat_command", lambda cmd: sent.append(cmd))
+    memory.save_hide_and_seek({"active": True, "finders": [], "hint_count": 1, "reward_gold": 500, "current_reward": 500, "hints": []})
+    count = memory.increment_hint_count()
+    assert count == 2
+    data = memory.load_hide_and_seek()
+    assert data["current_reward"] == 400  # 500 - (2-1)*100 = 400
+    assert "4000000" in sent[-1]
+
+
+def test_increment_hint_count_decay_at_5(monkeypatch):
+    """Hint 5 — 80% total decay."""
+    sent = []
+    monkeypatch.setattr("aldricbot.input_control.send_chat_command", lambda cmd: sent.append(cmd))
+    memory.save_hide_and_seek({"active": True, "finders": [], "hint_count": 4, "reward_gold": 500, "current_reward": 200, "hints": []})
+    count = memory.increment_hint_count()
+    assert count == 5
+    data = memory.load_hide_and_seek()
+    assert data["current_reward"] == 100  # 500 - (5-1)*100 = 100
+    assert "1000000" in sent[-1]
+
+
+def test_store_hint():
+    memory.save_hide_and_seek({"active": True, "finders": [], "hints": []})
+    memory.store_hint("The earth mourns here...")
+    memory.store_hint("Spires of a fallen prince...")
+    hints = memory.get_hints()
+    assert len(hints) == 2
+    assert hints[0] == "The earth mourns here..."
+    assert hints[1] == "Spires of a fallen prince..."
+
+
+def test_get_hints_empty():
+    assert memory.get_hints() == []
+
+
+def test_get_current_reward():
+    memory.save_hide_and_seek({"active": True, "finders": [], "reward_gold": 500, "current_reward": 400})
+    assert memory.get_current_reward() == 400
+
+
+def test_get_current_reward_default():
+    assert memory.get_current_reward() == 0
+
+
+def test_get_winner_stats():
+    memory.save_hide_and_seek({
+        "active": False,
+        "finders": [
+            {"name": "Fenwick", "found_at": "...", "gold_given": 500},
+            {"name": "Grukk", "found_at": "...", "gold_given": 450},
+            {"name": "Fenwick", "found_at": "...", "gold_given": 400},
+        ],
+    })
+    stats = memory.get_winner_stats()
+    assert len(stats) == 2
+    assert stats[0]["name"] == "Fenwick"
+    assert stats[0]["wins"] == 2
+    assert stats[0]["total_gold"] == 900
+    assert stats[1]["name"] == "Grukk"
+    assert stats[1]["wins"] == 1
+
+
+def test_get_winner_stats_empty():
+    assert memory.get_winner_stats() == []
+
+
+def test_init_paths_sets_hide_and_seek_file(tmp_path, monkeypatch):
+    monkeypatch.setattr("aldricbot.memory.Path.home", lambda: tmp_path)
+    memory.init_paths("TestChar")
+    assert memory.HIDE_AND_SEEK_FILE == tmp_path / ".aldricbot" / "characters" / "TestChar" / "hide_and_seek.json"
