@@ -17,6 +17,7 @@ STATE_DIR = Path.home() / ".aldricbot"
 GUILDMATES_DIR = STATE_DIR / "guildmates"
 SERVER_MEMORY_FILE = STATE_DIR / "server_memory.json"
 SELF_MEMORY_FILE = STATE_DIR / "self_memory.json"
+HIDE_AND_SEEK_FILE = STATE_DIR / "hide_and_seek.json"
 
 
 def init_paths(character_name: str) -> None:
@@ -26,7 +27,7 @@ def init_paths(character_name: str) -> None:
     (~/.aldricbot/guildmates/) to the new per-character layout
     (~/.aldricbot/characters/<name>/) if needed.
     """
-    global STATE_DIR, GUILDMATES_DIR, SERVER_MEMORY_FILE, SELF_MEMORY_FILE
+    global STATE_DIR, GUILDMATES_DIR, SERVER_MEMORY_FILE, SELF_MEMORY_FILE, HIDE_AND_SEEK_FILE
 
     base = Path.home() / ".aldricbot"
     new_dir = base / "characters" / character_name
@@ -46,6 +47,7 @@ def init_paths(character_name: str) -> None:
     GUILDMATES_DIR = new_dir / "guildmates"
     SERVER_MEMORY_FILE = new_dir / "server_memory.json"
     SELF_MEMORY_FILE = new_dir / "self_memory.json"
+    HIDE_AND_SEEK_FILE = new_dir / "hide_and_seek.json"
 
 MAX_SERVER_FACTS = 20
 
@@ -336,3 +338,104 @@ def save_self_memory(summary: str) -> None:
         "last_updated": datetime.now().strftime("%Y-%m-%d"),
     }
     _atomic_write(SELF_MEMORY_FILE, data)
+
+
+# ── Hide and Seek ──────────────────────────────────────────────
+
+
+def load_hide_and_seek() -> dict:
+    """Load hide-and-seek state. Returns default inactive state if not found."""
+    try:
+        return json.loads(HIDE_AND_SEEK_FILE.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"active": False, "finders": []}
+
+
+def save_hide_and_seek(data: dict) -> None:
+    """Save hide-and-seek state atomically."""
+    _atomic_write(HIDE_AND_SEEK_FILE, data)
+
+
+def set_hide_and_seek_active(active: bool, activated_by: str, reward_gold: int = 0) -> dict:
+    """Activate or deactivate hide and seek. Preserves finders across games."""
+    data = load_hide_and_seek()
+    data["active"] = active
+    data["activated_by"] = activated_by
+    data["activated_at"] = datetime.now().isoformat()
+    data["reward_gold"] = reward_gold
+    data["current_reward"] = reward_gold
+    data["hint_count"] = 0
+    data["hints"] = []
+    save_hide_and_seek(data)
+    return data
+
+
+def record_finder(name: str, gold_given: int) -> dict:
+    """Record a finder and deactivate the game."""
+    data = load_hide_and_seek()
+    data["finders"].append({
+        "name": name,
+        "found_at": datetime.now().isoformat(),
+        "gold_given": gold_given,
+    })
+    data["active"] = False
+    save_hide_and_seek(data)
+    return data
+
+
+def increment_hint_count() -> int:
+    """Bump hint count and compute decayed reward. Returns new hint count."""
+    from aldricbot import input_control
+
+    data = load_hide_and_seek()
+    data["hint_count"] = data.get("hint_count", 0) + 1
+    hint_count = data["hint_count"]
+    reward_gold = data.get("reward_gold", 0)
+
+    # No decay on first hint; 20% of original per hint after that
+    if hint_count >= 2:
+        decay = (hint_count - 1) * (reward_gold * 20 // 100)
+        data["current_reward"] = max(0, reward_gold - decay)
+    else:
+        data["current_reward"] = reward_gold
+
+    save_hide_and_seek(data)
+
+    # Sync addon copper
+    new_reward = data["current_reward"]
+    input_control.send_chat_command(
+        f"/script AldricBotAddonDB.hideAndSeekRewardCopper = {new_reward * 10000}"
+    )
+    return hint_count
+
+
+def store_hint(hint_text: str) -> None:
+    """Append a hint to the hints list in state."""
+    data = load_hide_and_seek()
+    data.setdefault("hints", []).append(hint_text)
+    save_hide_and_seek(data)
+
+
+def get_current_reward() -> int:
+    """Return the current reward gold amount."""
+    data = load_hide_and_seek()
+    return data.get("current_reward", data.get("reward_gold", 0))
+
+
+def get_hints() -> list[str]:
+    """Return all hints given so far in the current game."""
+    data = load_hide_and_seek()
+    return data.get("hints", [])
+
+
+def get_winner_stats() -> list[dict]:
+    """Aggregate finders into [{name, wins, total_gold}] sorted by wins desc."""
+    data = load_hide_and_seek()
+    stats: dict[str, dict] = {}
+    for finder in data.get("finders", []):
+        name = finder["name"]
+        if name not in stats:
+            stats[name] = {"name": name, "wins": 0, "total_gold": 0}
+        stats[name]["wins"] += 1
+        stats[name]["total_gold"] += finder.get("gold_given", 0)
+    return sorted(stats.values(), key=lambda x: x["wins"], reverse=True)

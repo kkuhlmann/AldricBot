@@ -8,6 +8,10 @@ local AldricBotAddon = CreateFrame("Frame", "AldricBotAddonFrame", UIParent)
 local updateInterval = 1.0  -- seconds between state updates
 local timeSinceLastUpdate = 0
 
+-- Hide and seek state
+local hideAndSeekActive = false
+local tradePartnerName = nil
+
 -- ============================================================
 -- MESSAGE BUFFER
 -- Captures guild chat and system messages for Claude
@@ -71,6 +75,8 @@ end
 -- ============================================================
 
 local function GetPlayerInfo()
+    SetMapToCurrentZone()
+    local px, py = GetPlayerMapPosition("player")
     return {
         name    = UnitName("player"),
         class   = UnitClass("player"),
@@ -79,14 +85,18 @@ local function GetPlayerInfo()
         subZone = GetSubZoneText(),
         isDead  = UnitIsDead("player") and true or false,
         isGhost = UnitIsGhost("player") and true or false,
+        playerX = px,
+        playerY = py,
     }
 end
 
 local function CollectState()
     return {
-        timestamp    = GetTime(),
-        player       = GetPlayerInfo(),
-        chatMessages = messageBuffer,
+        timestamp        = GetTime(),
+        player           = GetPlayerInfo(),
+        chatMessages     = messageBuffer,
+        hideAndSeekActive = hideAndSeekActive,
+        playerGold       = GetMoney(),
     }
 end
 
@@ -164,6 +174,9 @@ eventFrame:RegisterEvent("CHAT_MSG_RAID")
 eventFrame:RegisterEvent("CHAT_MSG_RAID_LEADER")
 eventFrame:RegisterEvent("CHAT_MSG_ACHIEVEMENT")
 eventFrame:RegisterEvent("CHAT_MSG_GUILD_ACHIEVEMENT")
+eventFrame:RegisterEvent("TRADE_SHOW")
+eventFrame:RegisterEvent("TRADE_REQUEST_CANCEL")
+eventFrame:RegisterEvent("UI_INFO_MESSAGE")
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "UI_ERROR_MESSAGE" then
@@ -231,6 +244,24 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             local senderInfo = GetGuildMemberInfo(sender)
             AddMessage("raid", sender .. ": " .. msg, senderInfo)
         end
+
+    elseif event == "TRADE_SHOW" then
+        if hideAndSeekActive then
+            tradePartnerName = UnitName("NPC")
+            SetTradeMoney(AldricBotAddonDB.hideAndSeekRewardCopper or 0)
+            AcceptTrade()
+        end
+
+    elseif event == "TRADE_REQUEST_CANCEL" then
+        tradePartnerName = nil
+
+    elseif event == "UI_INFO_MESSAGE" then
+        local _, msg = ...
+        if msg and msg:find("Trade complete") and tradePartnerName and hideAndSeekActive then
+            local senderInfo = GetGuildMemberInfo(tradePartnerName)
+            AddMessage("trade_complete", tradePartnerName, senderInfo)
+            tradePartnerName = nil
+        end
     end
 end)
 
@@ -242,6 +273,12 @@ AldricBotAddon:SetScript("OnUpdate", function(self, elapsed)
     timeSinceLastUpdate = timeSinceLastUpdate + elapsed
     if timeSinceLastUpdate < updateInterval then return end
     timeSinceLastUpdate = 0
+
+    -- Sync hide-and-seek state from SavedVariables (set by daemon via /script)
+    local dbActive = AldricBotAddonDB.hideAndSeekActive
+    if dbActive ~= nil then
+        hideAndSeekActive = dbActive
+    end
 
     local state = CollectState()
     AldricBotAddonDB.lastState = toJSON(state)

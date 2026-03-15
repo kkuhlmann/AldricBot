@@ -159,3 +159,56 @@ def test_wrong_character_name_returns_none():
     """Using the wrong character name in guild chat returns None."""
     result = _parse_command("Fenwick: Hey Aldric, remember that X", "guild", character_name="Theron")
     assert result is None
+
+
+# ── Hide and seek commands ─────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "msg_text, msg_type, expected",
+    [
+        # Status
+        ("Fenwick: Hey Aldric, are you hiding", "guild", ("hide_and_seek_status", "")),
+        ("Fenwick: are you hiding", "whisper", ("hide_and_seek_status", "")),
+        # Hint request
+        ("Fenwick: Hey Aldric, give me a hint", "guild", ("hide_and_seek_hint_request", "")),
+        ("Fenwick: Hey Aldric, give us a hint", "guild", ("hide_and_seek_hint_request", "")),
+        ("Fenwick: Hey Aldric, hint please", "guild", ("hide_and_seek_hint_request", "")),
+        ("Fenwick: Hey Aldric, hint pls", "guild", ("hide_and_seek_hint_request", "")),
+        ("Fenwick: Hey Aldric, can I get a hint", "guild", ("hide_and_seek_hint_request", "")),
+        ("Fenwick: Hey Aldric, another hint", "guild", ("hide_and_seek_hint_request", "")),
+        ("Fenwick: Hey Aldric, next hint", "guild", ("hide_and_seek_hint_request", "")),
+        ("Fenwick: Hey Aldric, got any hints", "guild", ("hide_and_seek_hint_request", "")),
+        ("Fenwick: Hey Aldric, any more hints", "guild", ("hide_and_seek_hint_request", "")),
+        ("Fenwick: Hey Aldric, any hints", "guild", ("hide_and_seek_hint_request", "")),
+        ("Fenwick: give me a hint", "whisper", ("hide_and_seek_hint_request", "")),
+        # Hint history
+        ("Fenwick: Hey Aldric, what are the hints", "guild", ("hide_and_seek_hints", "")),
+        ("Fenwick: Hey Aldric, hide and seek hints", "guild", ("hide_and_seek_hints", "")),
+        ("Fenwick: Hey Aldric, repeat the hints", "guild", ("hide_and_seek_hints", "")),
+        ("Fenwick: what are the hints", "whisper", ("hide_and_seek_hints", "")),
+        # Winners
+        ("Fenwick: Hey Aldric, who's won hide and seek", "guild", ("hide_and_seek_winners", "")),
+        ("Fenwick: Hey Aldric, who has won", "guild", ("hide_and_seek_winners", "")),
+        ("Fenwick: Hey Aldric, who won", "guild", ("hide_and_seek_winners", "")),
+        ("Fenwick: Hey Aldric, hide and seek leaderboard", "guild", ("hide_and_seek_winners", "")),
+        ("Fenwick: Hey Aldric, hide and seek winners", "guild", ("hide_and_seek_winners", "")),
+        ("Fenwick: Hey Aldric, hide and seek scores", "guild", ("hide_and_seek_winners", "")),
+        ("Fenwick: who won", "whisper", ("hide_and_seek_winners", "")),
+        # Admin start
+        ("Admin: Hey Aldric, start hide and seek 500 gold", "whisper", ("start_hide_and_seek", "500")),
+        ("Admin: Hey Aldric, start hide and seek 500g", "whisper", ("start_hide_and_seek", "500")),
+        ("Admin: Hey Aldric, begin hide and seek 1000 gold", "whisper", ("start_hide_and_seek", "1000")),
+        # Admin stop
+        ("Admin: Hey Aldric, stop hide and seek", "whisper", ("stop_hide_and_seek", "")),
+        ("Admin: Hey Aldric, end hide and seek", "whisper", ("stop_hide_and_seek", "")),
+        ("Admin: Hey Aldric, cancel hide and seek", "whisper", ("stop_hide_and_seek", "")),
+    ],
+)
+def test_hide_and_seek_commands(msg_text, msg_type, expected):
+    assert _parse_command(msg_text, msg_type) == expected
+
+
+def test_start_hide_and_seek_without_amount_returns_none():
+    """'start hide and seek' without gold amount does NOT match."""
+    assert _parse_command("Admin: Hey Aldric, start hide and seek", "whisper") is None

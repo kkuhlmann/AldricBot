@@ -19,9 +19,27 @@ from aldricbot.events import (
     _parse_json_response,
     _run_claude,
     _send_commands,
+    _send_guild_message,
     _send_response,
     _send_whisper,
 )
+
+
+# ── Hide-and-seek hint specificity levels ────────────────────────
+
+HINT_SPECIFICITY = {
+    1: "VAGUE AREA. Players already know your zone from the guild roster. Describe vaguely WHERE in the zone you are — "
+       "the terrain, the feel of this part of the zone, what kind of area (coast, hills, forest, ruins, road). "
+       "Example: 'The shoreline here is rocky and cold... gulls cry where the land meets grey water.'",
+    2: "LANDMARK. Reference a well-known landmark, dungeon, or lore event visible or nearby in this part of the zone. "
+       "Example: 'I can see the spires of a city that once housed a prince who became a monster.'",
+    3: "SUB-AREA. Reference a recognizable sub-area, NPC camp, quest hub, or dungeon entrance nearby. "
+       "Example: 'A great forge still burns, though its makers have long departed.'",
+    4: "SPECIFIC. Reference a named NPC, unique object, or distinct feature near your exact position. "
+       "Example: 'The troll witch doctor here sells strange brews... I can smell them from where I sit.'",
+    5: "PINPOINT. Reference an exact, unmistakable landmark or named NPC that veteran players can find immediately. "
+       "Example: 'Old Emma wanders the square just paces from where I stand.'",
+}
 
 
 # ── Admin command parsing ────────────────────────────────────────
@@ -121,6 +139,31 @@ def _parse_command(msg_text: str, msg_type: str = "whisper", character_name: str
     if remember_match:
         return ("remember", remember_match.group(1).strip())
 
+    # Hide and seek status (any channel, no Claude call)
+    if re.match(r"are you hiding", remainder_lower):
+        return ("hide_and_seek_status", "")
+
+    # Hide and seek hint request (guild chat, triggers Claude hint generation)
+    if re.match(r"(?:give .* hint|hint (?:please|pls)|can .* hint|got .* hint|another hint|next hint|any (?:more )?hints)", remainder_lower):
+        return ("hide_and_seek_hint_request", "")
+
+    # Hide and seek hint history (any channel, no Claude call)
+    if re.match(r"(?:what are the hints|hide\s+and\s+seek\s+hints|repeat.*hints)", remainder_lower):
+        return ("hide_and_seek_hints", "")
+
+    # Hide and seek leaderboard (any channel, no Claude call)
+    if re.match(r"(?:who(?:'s| has| have)?\s+won|hide\s+and\s+seek\s+(?:winners|leaderboard|scores?))", remainder_lower):
+        return ("hide_and_seek_winners", "")
+
+    # Admin start — gold amount required
+    m = re.match(r"(?:start|begin)\s+hide\s+and\s+seek\s+(\d+)\s*(?:gold|g)\b", remainder_lower)
+    if m:
+        return ("start_hide_and_seek", m.group(1))
+
+    # Admin stop
+    if re.match(r"(?:stop|end|cancel)\s+hide\s+and\s+seek", remainder_lower):
+        return ("stop_hide_and_seek", "")
+
     return None
 
 
@@ -213,6 +256,17 @@ class ChatHandler(EventHandler):
                 return "ok"
             if action == "help":
                 self._handle_help(sender, msg_type)
+                return "ok"
+            if action == "hide_and_seek_status":
+                self._handle_hide_and_seek_status(sender, msg_type)
+                return "ok"
+            if action == "hide_and_seek_hint_request":
+                return self._handle_hide_and_seek_hint_request(sender, msg_type, ctx)
+            if action == "hide_and_seek_hints":
+                self._handle_hide_and_seek_hints(sender, msg_type)
+                return "ok"
+            if action == "hide_and_seek_winners":
+                self._handle_hide_and_seek_winners(sender, msg_type)
                 return "ok"
             # Self-forget — available from any channel
             if action == "forget_self":
@@ -483,6 +537,12 @@ class ChatHandler(EventHandler):
             _log(f"Admin: cleared all server facts ({count} facts)")
             return "ok"
 
+        if action == "start_hide_and_seek":
+            return self._handle_start_hide_and_seek(arg, sender)
+
+        if action == "stop_hide_and_seek":
+            return self._handle_stop_hide_and_seek(sender)
+
         return "ok"
 
     def _handle_help(self, sender: str, msg_type: str) -> None:
@@ -503,6 +563,9 @@ class ChatHandler(EventHandler):
             sender,
             '"Tell me the world facts" — I will recite the facts I have been told.',
         )
+        _send_response(msg_type, sender, '"Are you hiding?" — check if a hide and seek game is active.')
+        _send_response(msg_type, sender, '"What are the hints?" — see all hints given so far.')
+        _send_response(msg_type, sender, '"Who\'s won hide and seek?" — see the leaderboard.')
         _send_response(msg_type, sender, '"Help" — this list.')
         _log(f"Sent help to {sender} via {msg_type}")
 
@@ -565,6 +628,160 @@ class ChatHandler(EventHandler):
             line = f"{i}. {fact['text']} (by {fact['added_by']}, {fact['added_at']})"
             _send_response(msg_type, sender, line)
         _log(f"World facts: sent {len(facts)} facts to {sender}")
+
+    def _handle_hide_and_seek_status(self, sender: str, msg_type: str) -> None:
+        """Report whether hide and seek is active."""
+        hs = memory.load_hide_and_seek()
+        if hs.get("active"):
+            reward = hs.get("current_reward", hs.get("reward_gold", 0))
+            _send_response(msg_type, sender, f"Aye, I am hiding. {reward} gold to the one who finds me.")
+        else:
+            _send_response(msg_type, sender, "No, I am not hiding at the moment.")
+        _log(f"Hide and seek status query from {sender}")
+
+    def _handle_hide_and_seek_hints(self, sender: str, msg_type: str) -> None:
+        """Send all hints given so far in the current game."""
+        hs = memory.load_hide_and_seek()
+        if not hs.get("active"):
+            _send_response(msg_type, sender, "There is no hunt underway, friend.")
+            _log(f"Hint history query from {sender} — no active game")
+            return
+        hints = memory.get_hints()
+        if not hints:
+            _send_response(msg_type, sender, "No hints have been given yet.")
+        else:
+            for i, hint in enumerate(hints, 1):
+                _send_response(msg_type, sender, f"Hint {i}: {hint}")
+        _log(f"Hint history sent to {sender} ({len(hints)} hints)")
+
+    def _handle_hide_and_seek_hint_request(
+        self, sender: str, msg_type: str, ctx: EventContext
+    ) -> str:
+        """Generate and send a hide-and-seek hint on request."""
+        hs = memory.load_hide_and_seek()
+        if not hs.get("active"):
+            _send_response(msg_type, sender, "There is no hunt underway, friend.")
+            _log(f"Hint request from {sender} — no active game")
+            return "ok"
+
+        hint_count = hs.get("hint_count", 0)
+        if hint_count >= 5:
+            _send_response(msg_type, sender, "All hints have been given. You are on your own now, seeker.")
+            _log(f"Hint request from {sender} — max hints reached")
+            return "ok"
+
+        if not ctx.zone:
+            _send_response(msg_type, sender, "I... cannot recall where I am. Try again shortly.")
+            _log("Hint request — no zone data available")
+            return "ok"
+
+        if not ctx.auth_ok:
+            self._send_auth_down({"type": msg_type, "text": f"{sender}: hint"}, ctx)
+            return "ok"
+
+        self._send_thinking_emote(ctx)
+
+        new_count = memory.increment_hint_count()
+        hs = memory.load_hide_and_seek()
+        current_reward = hs.get("current_reward", 0)
+        reward_gold = hs.get("reward_gold", 0)
+
+        specificity = HINT_SPECIFICITY.get(new_count, HINT_SPECIFICITY[5])
+
+        prompt = (
+            "Daemon mode: hide-and-seek hint generation.\n"
+            f"You are playing hide and seek with your guild. Current reward: {current_reward} gold (started at {reward_gold}).\n"
+            f"This is hint {new_count} of 5.\n\n"
+            f"You are currently in: {ctx.zone}"
+        )
+        if ctx.sub_zone:
+            prompt += f" — {ctx.sub_zone}"
+        prompt += (
+            f"\n\nSPECIFICITY LEVEL: {specificity}\n\n"
+            "RULES:\n"
+            "1. Write a 1-2 sentence riddle-like clue in character. Do NOT name your zone or sub-zone.\n"
+            "2. Reference WoW scenery, landmarks, lore, or iconic NPCs that veteran players would recognize.\n"
+            "3. Be creative — use metaphor, allusion, and in-character voice.\n"
+            "4. Do NOT say coordinates, cardinal directions, or 'I am in [zone]'.\n"
+            "5. Use WebSearch to find notable landmarks/NPCs in your zone for accuracy.\n"
+            "6. Mention the dwindling reward to create urgency.\n\n"
+            "Output ONLY a JSON array with a single /g command string.\n"
+            f'Example: ["/g The bones of a fallen dragon lord rest near where I sit... {current_reward}g remains for the bold."]\n'
+            "Keep under 240 characters."
+        )
+
+        result = _run_claude(prompt, ctx.model, ctx.session_ttl)
+        if result is None:
+            _log("Hint generation — Claude call failed")
+            return "transient_failure"
+        if result.stderr:
+            _log(f"Hint Claude stderr: {result.stderr}")
+        if _is_auth_error(result):
+            _log("Auth error during hint generation")
+            return "auth_error"
+
+        _log(f"Hint Claude response: {result.stdout}")
+        parsed = _parse_json_response(result.stdout)
+        commands = None
+        if isinstance(parsed, list):
+            commands = parsed
+        elif isinstance(parsed, dict):
+            commands = parsed.get("commands", [])
+
+        if commands:
+            _send_commands(commands)
+            hint_text = commands[0]
+            if hint_text.startswith("/g "):
+                hint_text = hint_text[3:]
+            memory.store_hint(hint_text)
+            _log(f"Sent hide-and-seek hint {new_count} (requested by {sender})")
+        else:
+            _log(f"Failed to parse hint response: {result.stdout}")
+        return "ok"
+
+    def _handle_hide_and_seek_winners(self, sender: str, msg_type: str) -> None:
+        """Send the hide and seek leaderboard."""
+        stats = memory.get_winner_stats()
+        if not stats:
+            _send_response(msg_type, sender, "No one has found me yet.")
+            _log("Hide and seek winners query — no finders")
+            return
+        for entry in stats[:5]:
+            _send_response(
+                msg_type, sender,
+                f"{entry['name']}: {entry['wins']} win{'s' if entry['wins'] != 1 else ''}, {entry['total_gold']}g total",
+            )
+        _log(f"Hide and seek leaderboard sent to {sender}")
+
+    def _handle_start_hide_and_seek(self, gold_str: str, sender: str) -> str:
+        """Admin: start a hide and seek game."""
+        hs = memory.load_hide_and_seek()
+        if hs.get("active"):
+            _send_whisper(sender, "A hunt is already underway, friend.")
+            return "ok"
+        gold = int(gold_str)
+        memory.set_hide_and_seek_active(True, sender, gold)
+        input_control.send_chat_command(
+            f"/script AldricBotAddonDB.hideAndSeekActive = true; AldricBotAddonDB.hideAndSeekRewardCopper = {gold * 10000}"
+        )
+        _send_whisper(sender, f"Hide and seek started with {gold}g reward.")
+        _send_guild_message(f"A game of hide and seek has begun! Find me and earn {gold} gold. The hunt is on!")
+        _log(f"Admin: started hide and seek ({gold}g) by {sender}")
+        return "ok"
+
+    def _handle_stop_hide_and_seek(self, sender: str) -> str:
+        """Admin: stop the current hide and seek game."""
+        hs = memory.load_hide_and_seek()
+        if not hs.get("active"):
+            _send_whisper(sender, "There is no hunt underway.")
+            return "ok"
+        hs["active"] = False
+        memory.save_hide_and_seek(hs)
+        input_control.send_chat_command("/script AldricBotAddonDB.hideAndSeekActive = false")
+        _send_whisper(sender, "Hide and seek has been stopped.")
+        _send_guild_message("The hunt has been called off. Perhaps another time, friends.")
+        _log(f"Admin: stopped hide and seek by {sender}")
+        return "ok"
 
     def _handle_forget_server(
         self, forget_text: str, sender: str, msg_type: str, ctx: EventContext

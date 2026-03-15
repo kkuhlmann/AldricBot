@@ -17,6 +17,7 @@ aldricbot/            Python package
   lua_io.py           Lua SavedVariables parser
   memory.py           Guildmate and server memory I/O
   persona.py          Persona loading, persona prompt rendering, emote/response accessors
+  trade_handler.py    Hide-and-seek trade completion handler
 personas/             Character persona definitions
   aldric.yaml         Default persona — Aldric the paladin chronicler
   class_personalities.yaml  Class-specific speaking styles

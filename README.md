@@ -78,6 +78,10 @@ The "Hey Aldric" prefix is required for guild, party, and raid chat. For whisper
 | `Hey Aldric, forget about [your name]`   | Same as above (using your character name)                                  |
 | `Hey Aldric, tell me about myself`       | Shows what Aldric knows about you (class, level, times spoken, his notes)  |
 | `Hey Aldric, tell me the world facts`    | Lists all stored server facts                                              |
+| `Hey Aldric, are you hiding?`            | Checks if a hide and seek game is active                                   |
+| `Hey Aldric, give me a hint`             | Requests a hide and seek hint (up to 5 per game)                           |
+| `Hey Aldric, what are the hints?`        | Shows all hide and seek hints given so far                                 |
+| `Hey Aldric, who's won hide and seek?`   | Shows the hide and seek leaderboard                                        |
 | `Hey Aldric, help`                       | Lists available commands                                                   |
 
 ### Admin Only (Whisper)
@@ -89,6 +93,8 @@ These require the bot operator to have configured an admin character. If you're 
 | `Hey Aldric, forget about [name]` | Erases Aldric's memory of another person              |
 | `Hey Aldric, forget everything`   | Erases all guildmate memories (server facts are kept) |
 | `Hey Aldric, forget all facts`    | Erases all server memory facts                        |
+| `Hey Aldric, start hide and seek [N] gold` | Starts a hide and seek game with N gold reward |
+| `Hey Aldric, stop hide and seek`  | Cancels the current hide and seek game                |
 
 **Server facts** are shared knowledge — things like raid schedules, respec announcements, or guild news. Aldric references them naturally in conversation when relevant. Up to 20 facts can be stored at a time.
 
@@ -101,6 +107,31 @@ Aldric reacts to guild events without being prompted:
 - **Level-ups** — He acknowledges your progress. Your new level is automatically remembered.
 
 Each reaction type has a cooldown (5 minutes for logins, 1 minute for achievements/level-ups) to avoid spam during rapid reconnects or achievement chains.
+
+## Hide and Seek
+
+The admin can start a hide and seek event where Aldric hides in the world and players try to find him for a gold reward.
+
+**How it works:**
+
+1. The admin whispers: `start hide and seek 500 gold`
+2. Aldric announces the hunt in guild chat
+3. Players request hints in guild chat (e.g., `Hey Aldric, give me a hint`) — up to 5 hints per game
+4. Each hint after the first reduces the reward by 20% of the original purse
+5. When a player opens a trade with Aldric, the addon automatically puts up the reward gold and accepts the trade
+6. The first player to trade with him wins — Aldric announces it in guild chat and the game ends
+
+**Reward decay example (500g start):**
+
+| Hint | Reward | Specificity |
+| ---- | ------ | ----------- |
+| 1 | 500g | Vague area within the zone |
+| 2 | 400g | Nearby landmark |
+| 3 | 300g | Sub-area or quest hub |
+| 4 | 200g | Named NPC or feature |
+| 5 | 100g | Exact pinpoint |
+
+Players can request hints with `give me a hint` (also: `hint please`, `another hint`, `next hint`, `any hints`), check the current game status with `are you hiding?`, review all hints with `what are the hints?`, and see the all-time leaderboard with `who's won hide and seek?`.
 
 ## Calendar Awareness
 
@@ -258,6 +289,7 @@ aldricbot/            Python package
   lua_io.py           Lua SavedVariables parser
   memory.py           Guildmate and server memory I/O
   persona.py          Persona loading, persona prompt rendering, emote/response accessors
+  trade_handler.py    Hide-and-seek trade completion handler
 personas/             Character persona definitions
   aldric.yaml         Default persona — Aldric the paladin chronicler
   class_personalities.yaml  Class-specific speaking styles
