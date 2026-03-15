@@ -183,6 +183,22 @@ def _parse_json_response(text: str) -> dict | list | None:
             return parsed
     except (json.JSONDecodeError, TypeError):
         pass
+    # Fallback: extract JSON embedded in prose (e.g. when Claude uses WebSearch)
+    for start_char, end_char in [("[", "]"), ("{", "}")]:
+        start = text.find(start_char)
+        if start == -1:
+            continue
+        end = text.rfind(end_char)
+        if end <= start:
+            continue
+        try:
+            parsed = json.loads(text[start:end + 1])
+            if isinstance(parsed, dict) and "commands" in parsed:
+                return parsed
+            if isinstance(parsed, list) and all(isinstance(s, str) for s in parsed):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
     return None
 
 
