@@ -109,6 +109,16 @@ def tap_key(key: str) -> None:
         _keyboard.release(key)
 
 
+def press_trade_accept_key() -> None:
+    """Press CTRL-SHIFT-T to trigger trade accept in WoW (h&s mode)."""
+    _activate_wow_window()
+    with _keyboard.pressed(Key.ctrl):
+        with _keyboard.pressed(Key.shift):
+            _keyboard.press('t')
+            _keyboard.release('t')
+    time.sleep(0.1)
+
+
 def send_chat_command(text: str) -> None:
     """Type a slash command directly into WoW's chat box and send it.
 

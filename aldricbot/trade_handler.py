@@ -46,5 +46,9 @@ class TradeHandler(EventHandler):
         input_control.send_chat_command(
             "/script AldricBotAddonDB.hideAndSeekActive = false"
         )
+        # Clear override keybinding in case addon didn't
+        input_control.send_chat_command(
+            "/script ClearOverrideBindings(AldricTradeAcceptBtn)"
+        )
         _log(f"Hide and seek: {finder_name} found Aldric, awarded {gold_given}g")
         return True

@@ -426,6 +426,16 @@ def main():
                     _log(f"Error sending farewell emote: {e}")
                 break
 
+            # During h&s: press trade accept key every 2s during the sleep
+            # so trades complete before the next /reload cancels the window
+            hs = memory.load_hide_and_seek()
+            hs_active = hs.get("active", False)
+
+            if hs_active:
+                for _ in range(CYCLE_SECONDS // 2):
+                    input_control.press_trade_accept_key()
+                    time.sleep(2)
+
             state = do_game_cycle()
             cycle += 1
 
