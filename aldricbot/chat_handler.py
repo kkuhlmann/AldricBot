@@ -690,7 +690,7 @@ class ChatHandler(EventHandler):
 
         prompt = (
             "Daemon mode: hide-and-seek hint generation.\n"
-            f"You are playing hide and seek with your guild. Current reward: {current_reward} gold (started at {reward_gold}).\n"
+            f"You are playing hide and seek with your guild. Current reward: {current_reward} gold.\n"
             f"This is hint {new_count} of 5.\n\n"
             f"You are currently in: {ctx.zone}"
         )
@@ -703,10 +703,9 @@ class ChatHandler(EventHandler):
             "2. Reference WoW scenery, landmarks, lore, or iconic NPCs that veteran players would recognize.\n"
             "3. Be creative — use metaphor, allusion, and in-character voice.\n"
             "4. Do NOT say coordinates, cardinal directions, or 'I am in [zone]'.\n"
-            "5. Use WebSearch to find notable landmarks/NPCs in your zone for accuracy.\n"
-            "6. Mention the dwindling reward to create urgency.\n\n"
+            "5. Use WebSearch to find notable landmarks/NPCs in your zone for accuracy.\n\n"
             "Output ONLY a JSON array with a single /g command string.\n"
-            f'Example: ["/g The bones of a fallen dragon lord rest near where I sit... {current_reward}g remains for the bold."]\n'
+            'Example: ["/g The bones of a fallen dragon lord rest near where I sit..."]\n'
             "Keep under 240 characters."
         )
 
@@ -730,6 +729,10 @@ class ChatHandler(EventHandler):
 
         if commands:
             _send_commands(commands)
+            if new_count == 1:
+                _send_guild_message(f"[Reward: {current_reward}g]")
+            else:
+                _send_guild_message(f"[Reward reduced to {current_reward}g — was {reward_gold}g]")
             hint_text = commands[0]
             if hint_text.startswith("/g "):
                 hint_text = hint_text[3:]

@@ -251,7 +251,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
     elseif event == "TRADE_SHOW" then
-        if hideAndSeekActive then
+        if hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive then
             tradePartnerName = UnitName("NPC")
             AldricBotAddon:Print("H&S trade opened with: " .. tostring(tradePartnerName))
             -- Defer money + accept setup by one frame for reliable initialization

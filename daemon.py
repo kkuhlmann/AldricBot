@@ -236,11 +236,14 @@ def _refresh_session():
     SESSION_START_FILE.write_text(str(time.time()))
 
 
-def do_game_cycle():
-    """Send /reload to WoW and read fresh game state."""
+def send_reload():
+    """Send /reload to WoW."""
+    input_control.send_reload()
+
+
+def read_game_state():
+    """Read fresh game state from SavedVariables."""
     try:
-        input_control.send_reload()
-        time.sleep(CYCLE_SECONDS)
         path = config.saved_variables_path()
         variables = lua_io.read_saved_variables(path)
         db = variables.get("AldricBotAddonDB", {})
@@ -248,6 +251,17 @@ def do_game_cycle():
         if isinstance(raw, str):
             return json.loads(raw)
         return {}
+    except Exception as e:
+        _log(f"Error reading game state: {e}")
+        return {}
+
+
+def do_game_cycle():
+    """Send /reload to WoW and read fresh game state."""
+    try:
+        send_reload()
+        time.sleep(CYCLE_SECONDS)
+        return read_game_state()
     except Exception as e:
         _log(f"Error in game cycle: {e}")
         return {}
@@ -426,17 +440,21 @@ def main():
                     _log(f"Error sending farewell emote: {e}")
                 break
 
-            # During h&s: press trade accept key every 2s during the sleep
-            # so trades complete before the next /reload cancels the window
             hs = memory.load_hide_and_seek()
             hs_active = hs.get("active", False)
 
+            send_reload()
+
+            # During h&s: press trade accept key every 2s during the
+            # post-reload wait so trades can complete before we read state
             if hs_active:
                 for _ in range(CYCLE_SECONDS // 2):
                     input_control.press_trade_accept_key()
                     time.sleep(2)
+            else:
+                time.sleep(CYCLE_SECONDS)
 
-            state = do_game_cycle()
+            state = read_game_state()
             cycle += 1
 
             # Periodic auth health check
