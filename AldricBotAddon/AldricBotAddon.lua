@@ -249,14 +249,6 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         if hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive then
             tradePartnerName = UnitName("NPC")
             AldricBotAddon:Print("H&S trade opened with: " .. tostring(tradePartnerName))
-            -- Defer money + accept setup by one frame for reliable initialization
-            local copper = AldricBotAddonDB.hideAndSeekRewardCopper or 0
-            local timer = CreateFrame("Frame")
-            timer:SetScript("OnUpdate", function(self)
-                self:SetScript("OnUpdate", nil)
-                MoneyInputFrame_SetCopper(TradePlayerInputMoneyFrame, copper)
-                AldricBotAddon:Print("H&S trade ready — gold set, awaiting /click accept")
-            end)
         end
 
     elseif event == "TRADE_REQUEST_CANCEL" then

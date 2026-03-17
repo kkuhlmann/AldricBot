@@ -444,6 +444,10 @@ def main():
             hs_active = hs.get("active", False)
 
             if hs_active:
+                reward_gold = hs.get("current_reward", hs.get("reward_gold", 0))
+                copper = reward_gold * 10000
+                input_control.send_chat_command(f"/script SetTradeMoney({copper})")
+                time.sleep(1)
                 for _ in range(3):
                     input_control.send_chat_command("/click TradeFrameTradeButton")
                     time.sleep(1)
