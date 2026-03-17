@@ -681,17 +681,16 @@ class ChatHandler(EventHandler):
 
         self._send_thinking_emote(ctx)
 
-        new_count = memory.increment_hint_count()
         hs = memory.load_hide_and_seek()
-        current_reward = hs.get("current_reward", 0)
+        pending_count = hs.get("hint_count", 0) + 1
         reward_gold = hs.get("reward_gold", 0)
 
-        specificity = HINT_SPECIFICITY.get(new_count, HINT_SPECIFICITY[5])
+        specificity = HINT_SPECIFICITY.get(pending_count, HINT_SPECIFICITY[5])
 
         prompt = (
             "Daemon mode: hide-and-seek hint generation.\n"
-            f"You are playing hide and seek with your guild. Current reward: {current_reward} gold.\n"
-            f"This is hint {new_count} of 5.\n\n"
+            f"You are playing hide and seek with your guild. Current reward: {reward_gold} gold.\n"
+            f"This is hint {pending_count} of 5.\n\n"
             f"You are currently in: {ctx.zone}"
         )
         if ctx.sub_zone:
@@ -729,6 +728,9 @@ class ChatHandler(EventHandler):
 
         if commands:
             _send_commands(commands)
+            new_count = memory.increment_hint_count()
+            hs = memory.load_hide_and_seek()
+            current_reward = hs.get("current_reward", 0)
             if new_count == 1:
                 _send_guild_message(f"[Reward: {current_reward}g]")
             else:

@@ -443,16 +443,13 @@ def main():
             hs = memory.load_hide_and_seek()
             hs_active = hs.get("active", False)
 
-            send_reload()
-
-            # During h&s: press trade accept key every 2s during the
-            # post-reload wait so trades can complete before we read state
             if hs_active:
-                for _ in range(CYCLE_SECONDS // 2):
+                for _ in range(3):
                     input_control.press_trade_accept_key()
-                    time.sleep(2)
-            else:
-                time.sleep(CYCLE_SECONDS)
+                    time.sleep(1)
+
+            send_reload()
+            time.sleep(CYCLE_SECONDS)
 
             state = read_game_state()
             cycle += 1

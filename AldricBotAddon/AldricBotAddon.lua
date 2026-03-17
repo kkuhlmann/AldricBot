@@ -273,7 +273,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "UI_INFO_MESSAGE" then
         local _, msg = ...
-        if msg and msg:find("Trade complete") and tradePartnerName and hideAndSeekActive then
+        if msg and msg:find("Trade complete") and tradePartnerName and (hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive) then
             local senderInfo = GetGuildMemberInfo(tradePartnerName)
             AddMessage("trade_complete", tradePartnerName, senderInfo)
             tradePartnerName = nil
