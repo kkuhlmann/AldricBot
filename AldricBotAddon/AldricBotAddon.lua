@@ -12,11 +12,6 @@ local timeSinceLastUpdate = 0
 local hideAndSeekActive = false
 local tradePartnerName = nil
 
--- SecureActionButton for trade accept (AcceptTrade is protected in 3.3.5a)
-local tradeAcceptBtn = CreateFrame("Button", "AldricTradeAcceptBtn", UIParent, "SecureActionButtonTemplate")
-tradeAcceptBtn:SetAttribute("type", "click")
-tradeAcceptBtn:Hide()
-
 -- ============================================================
 -- MESSAGE BUFFER
 -- Captures guild chat and system messages for Claude
@@ -259,17 +254,13 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             local timer = CreateFrame("Frame")
             timer:SetScript("OnUpdate", function(self)
                 self:SetScript("OnUpdate", nil)
-                SetTradeMoney(copper)
-                -- Set up secure accept button + keybinding for daemon to press
-                tradeAcceptBtn:SetAttribute("clickbutton", TradeFrameTradeButton)
-                SetOverrideBindingClick(tradeAcceptBtn, true, "CTRL-SHIFT-T", "AldricTradeAcceptBtn")
-                AldricBotAddon:Print("H&S trade ready — gold set, awaiting accept key")
+                MoneyInputFrame_SetCopper(TradePlayerInputMoneyFrame, copper)
+                AldricBotAddon:Print("H&S trade ready — gold set, awaiting /click accept")
             end)
         end
 
     elseif event == "TRADE_REQUEST_CANCEL" then
         tradePartnerName = nil
-        ClearOverrideBindings(tradeAcceptBtn)
 
     elseif event == "UI_INFO_MESSAGE" then
         local _, msg = ...
@@ -277,7 +268,6 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             local senderInfo = GetGuildMemberInfo(tradePartnerName)
             AddMessage("trade_complete", tradePartnerName, senderInfo)
             tradePartnerName = nil
-            ClearOverrideBindings(tradeAcceptBtn)
         end
     end
 end)

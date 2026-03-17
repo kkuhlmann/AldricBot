@@ -445,8 +445,9 @@ def main():
 
             if hs_active:
                 for _ in range(3):
-                    input_control.press_trade_accept_key()
+                    input_control.send_chat_command("/click TradeFrameTradeButton")
                     time.sleep(1)
+                time.sleep(2)  # let trade complete before /reload
 
             send_reload()
             time.sleep(CYCLE_SECONDS)
