@@ -247,19 +247,21 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "TRADE_SHOW" then
         if hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive then
-            tradePartnerName = UnitName("NPC")
+            tradePartnerName = UnitName("NPC") or TradeFrameRecipientNameText:GetText()
             AldricBotAddon:Print("H&S trade opened with: " .. tostring(tradePartnerName))
         end
 
-    elseif event == "TRADE_REQUEST_CANCEL" then
-        tradePartnerName = nil
-
     elseif event == "UI_INFO_MESSAGE" then
         local _, msg = ...
-        if msg and msg:find("Trade complete") and tradePartnerName and (hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive) then
-            local senderInfo = GetGuildMemberInfo(tradePartnerName)
-            AddMessage("trade_complete", tradePartnerName, senderInfo)
-            tradePartnerName = nil
+        if msg and msg:find("Trade complete") then
+            if tradePartnerName and (hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive) then
+                AldricBotAddon:Print("H&S trade complete with: " .. tradePartnerName)
+                local senderInfo = GetGuildMemberInfo(tradePartnerName)
+                AddMessage("trade_complete", tradePartnerName, senderInfo)
+                tradePartnerName = nil
+            elseif msg:find("Trade complete") then
+                AldricBotAddon:Print("Trade complete but H&S condition not met — partner: " .. tostring(tradePartnerName) .. ", active: " .. tostring(hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive))
+            end
         end
     end
 end)
