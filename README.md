@@ -131,7 +131,7 @@ The admin can start a hide and seek event where Aldric hides in the world and pl
 | 4 | 200g | Named NPC or feature |
 | 5 | 100g | Exact pinpoint |
 
-Players can request hints with `give me a hint` (also: `hint please`, `another hint`, `next hint`, `any hints`), check the current game status with `are you hiding?`, review all hints with `what are the hints?`, and see the all-time leaderboard with `who's won hide and seek?`.
+Players can request hints with `give me a hint` (also: `tell me a hint`, `hint please`, `another hint`, `next hint`, `any hints`), check the current game status with `are you hiding?`, review all hints with `what are the hints?`, and see the all-time leaderboard with `who's won hide and seek?`.
 
 ## Calendar Awareness
 

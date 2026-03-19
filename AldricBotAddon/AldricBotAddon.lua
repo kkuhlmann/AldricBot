@@ -96,6 +96,7 @@ local function CollectState()
         player           = GetPlayerInfo(),
         chatMessages     = messageBuffer,
         hideAndSeekActive = hideAndSeekActive,
+        tradeCompletedWith = AldricBotAddonDB.tradeCompletedWith,
         playerGold       = GetMoney(),
     }
 end
@@ -248,6 +249,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "TRADE_SHOW" then
         if hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive then
             tradePartnerName = UnitName("NPC") or TradeFrameRecipientNameText:GetText()
+            AldricBotAddonDB.tradePartnerName = tradePartnerName
             AldricBotAddon:Print("H&S trade opened with: " .. tostring(tradePartnerName))
         end
 
@@ -258,7 +260,10 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
                 AldricBotAddon:Print("H&S trade complete with: " .. tradePartnerName)
                 local senderInfo = GetGuildMemberInfo(tradePartnerName)
                 AddMessage("trade_complete", tradePartnerName, senderInfo)
+                -- Set persistent flag so daemon can detect completion even if message buffer is lost
+                AldricBotAddonDB.tradeCompletedWith = tradePartnerName
                 tradePartnerName = nil
+                AldricBotAddonDB.tradePartnerName = nil
             elseif msg:find("Trade complete") then
                 AldricBotAddon:Print("Trade complete but H&S condition not met — partner: " .. tostring(tradePartnerName) .. ", active: " .. tostring(hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive))
             end
@@ -334,6 +339,17 @@ initFrame:SetScript("OnEvent", function(self, event, arg1)
             end
             messageBuffer = fresh
             AldricBotAddonDB.messageHistory = messageBuffer
+        end
+
+        -- Restore trade partner name across /reload
+        if AldricBotAddonDB.tradePartnerName then
+            tradePartnerName = AldricBotAddonDB.tradePartnerName
+        end
+
+        -- Clean stale trade flags when hide-and-seek is not active
+        if not AldricBotAddonDB.hideAndSeekActive then
+            AldricBotAddonDB.tradeCompletedWith = nil
+            AldricBotAddonDB.tradePartnerName = nil
         end
 
         -- Process command queue (batch execution)

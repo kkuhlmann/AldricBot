@@ -31,7 +31,7 @@ from pathlib import Path
 from aldricbot import calendar, config, input_control, lua_io, memory
 from aldricbot import persona as persona_mod
 from aldricbot.chat_handler import ChatHandler
-from aldricbot.trade_handler import TradeHandler
+from aldricbot.trade_handler import TradeHandler, complete_hide_and_seek_trade
 from aldricbot.events import (
     PERSONA_PROMPT_PATH,
     AchievementHandler,
@@ -444,8 +444,7 @@ def main():
             hs_active = hs.get("active", False)
 
             if hs_active:
-                reward_gold = hs.get("current_reward", hs.get("reward_gold", 0))
-                copper = reward_gold * 10000
+                copper = hs.get("current_reward_copper", hs.get("reward_copper", 0))
                 input_control.send_chat_command(f"/script SetTradeMoney({copper})")
                 time.sleep(1)
                 for _ in range(3):
@@ -479,6 +478,12 @@ def main():
                     )
                     _log("Re-authenticate via SSH: claude auth login")
                 next_keepalive = cycle + AUTH_KEEPALIVE_INTERVAL
+
+            # Check persistent trade-completed flag (primary detection path)
+            trade_completed_with = state.get("tradeCompletedWith")
+            if trade_completed_with and hs_active:
+                complete_hide_and_seek_trade(trade_completed_with)
+                hs_active = False  # prevent duplicate processing this cycle
 
             # Extract zone info for prompts
             player = state.get("player", {})

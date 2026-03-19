@@ -144,7 +144,7 @@ def _parse_command(msg_text: str, msg_type: str = "whisper", character_name: str
         return ("hide_and_seek_status", "")
 
     # Hide and seek hint request (guild chat, triggers Claude hint generation)
-    if re.match(r"(?:give .* hint|hint (?:please|pls)|can .* hint|got .* hint|another hint|next hint|any (?:more )?hints)", remainder_lower):
+    if re.match(r"(?:give .* hint|tell .* hint|hint (?:please|pls)|can .* hint|got .* hint|another hint|next hint|any (?:more )?hints)", remainder_lower):
         return ("hide_and_seek_hint_request", "")
 
     # Hide and seek hint history (any channel, no Claude call)
@@ -380,17 +380,30 @@ class ChatHandler(EventHandler):
         if context["tier_name"] in ("familiar", "well_known") and context.get("nickname"):
             nickname_line = f'Your nickname for this person: "{context["nickname"]}". Use it naturally when addressing them.\n'
 
+        hs = memory.load_hide_and_seek()
+        hide_and_seek_active = hs.get("active", False)
+
         location_line = ""
-        if ctx.zone:
-            location_line = f"Your location: {ctx.zone}"
-            if ctx.sub_zone:
-                location_line += f" — {ctx.sub_zone}"
-            location_line += "\n"
-        msg_sender_zone = msg.get("senderZone", "")
-        if msg_sender_zone:
-            location_line += f"The sender is currently in: {msg_sender_zone}\n"
-        if location_line:
-            location_line += "Reference locations naturally when it fits.\n"
+        if not hide_and_seek_active:
+            if ctx.zone:
+                location_line = f"Your location: {ctx.zone}"
+                if ctx.sub_zone:
+                    location_line += f" — {ctx.sub_zone}"
+                location_line += "\n"
+            msg_sender_zone = msg.get("senderZone", "")
+            if msg_sender_zone:
+                location_line += f"The sender is currently in: {msg_sender_zone}\n"
+            if location_line:
+                location_line += "Reference locations naturally when it fits.\n"
+
+        hide_seek_line = ""
+        if hide_and_seek_active:
+            hide_seek_line = (
+                "IMPORTANT: You are currently playing hide and seek with your guild. "
+                "Do NOT reveal your location, zone, sub-zone, nearby landmarks, NPCs, or any geographical clues. "
+                "If asked where you are, be evasive and playful — remind them that's the game. "
+                "Only the hint system should give location information.\n"
+            )
 
         sender_parts = []
         if msg.get("senderClass"):
@@ -413,6 +426,7 @@ class ChatHandler(EventHandler):
             f"Message timestamp: {msg.get('time', 0)}\n\n"
             f"{sender_info_line}"
             f"{location_line}"
+            f"{hide_seek_line}"
             f"{memory_line}"
             f"{disposition_line}"
             f"{server_line}"
@@ -633,8 +647,8 @@ class ChatHandler(EventHandler):
         """Report whether hide and seek is active."""
         hs = memory.load_hide_and_seek()
         if hs.get("active"):
-            reward = hs.get("current_reward", hs.get("reward_gold", 0))
-            _send_response(msg_type, sender, f"Aye, I am hiding. {reward} gold to the one who finds me.")
+            reward_copper = hs.get("current_reward_copper", hs.get("reward_copper", 0))
+            _send_response(msg_type, sender, f"Aye, I am hiding. {memory.format_money(reward_copper)} to the one who finds me.")
         else:
             _send_response(msg_type, sender, "No, I am not hiding at the moment.")
         _log(f"Hide and seek status query from {sender}")
@@ -683,13 +697,13 @@ class ChatHandler(EventHandler):
 
         hs = memory.load_hide_and_seek()
         pending_count = hs.get("hint_count", 0) + 1
-        reward_gold = hs.get("reward_gold", 0)
+        reward_copper = hs.get("reward_copper", 0)
 
         specificity = HINT_SPECIFICITY.get(pending_count, HINT_SPECIFICITY[5])
 
         prompt = (
             "Daemon mode: hide-and-seek hint generation.\n"
-            f"You are playing hide and seek with your guild. Current reward: {reward_gold} gold.\n"
+            f"You are playing hide and seek with your guild. Current reward: {memory.format_money(reward_copper)}.\n"
             f"This is hint {pending_count} of 5.\n\n"
             f"You are currently in: {ctx.zone}"
         )
@@ -726,15 +740,32 @@ class ChatHandler(EventHandler):
         elif isinstance(parsed, dict):
             commands = parsed.get("commands", [])
 
+        # Fallback: if JSON parsing failed, extract the hint text directly
+        if not commands:
+            raw = result.stdout.strip()
+            # Strip code fences
+            if raw.startswith("```"):
+                lines = raw.split("\n")
+                raw = "\n".join(l for l in lines[1:] if l.strip() != "```").strip()
+            # Strip surrounding quotes
+            if (raw.startswith('"') and raw.endswith('"')) or (raw.startswith("'") and raw.endswith("'")):
+                raw = raw[1:-1]
+            # Strip /g prefix if present, then re-add it
+            if raw.lower().startswith("/g "):
+                raw = raw[3:]
+            if raw:
+                commands = [f"/g {raw[:240]}"]
+                _log(f"Hint JSON parse failed — used raw text fallback")
+
         if commands:
             _send_commands(commands)
             new_count = memory.increment_hint_count()
             hs = memory.load_hide_and_seek()
-            current_reward = hs.get("current_reward", 0)
+            current_copper = hs.get("current_reward_copper", 0)
             if new_count == 1:
-                _send_guild_message(f"[Reward: {current_reward}g]")
+                _send_guild_message(f"[Reward: {memory.format_money(current_copper)}]")
             else:
-                _send_guild_message(f"[Reward reduced to {current_reward}g — was {reward_gold}g]")
+                _send_guild_message(f"[Reward reduced to {memory.format_money(current_copper)} — was {memory.format_money(reward_copper)}]")
             hint_text = commands[0]
             if hint_text.startswith("/g "):
                 hint_text = hint_text[3:]
@@ -754,7 +785,7 @@ class ChatHandler(EventHandler):
         for entry in stats[:5]:
             _send_response(
                 msg_type, sender,
-                f"{entry['name']}: {entry['wins']} win{'s' if entry['wins'] != 1 else ''}, {entry['total_gold']}g total",
+                f"{entry['name']}: {entry['wins']} win{'s' if entry['wins'] != 1 else ''}, {memory.format_money(entry['total_copper'])} total",
             )
         _log(f"Hide and seek leaderboard sent to {sender}")
 
@@ -765,12 +796,13 @@ class ChatHandler(EventHandler):
             _send_whisper(sender, "A hunt is already underway, friend.")
             return "ok"
         gold = int(gold_str)
+        copper = gold * 10000
         memory.set_hide_and_seek_active(True, sender, gold)
         input_control.send_chat_command(
-            f"/script AldricBotAddonDB.hideAndSeekActive = true; AldricBotAddonDB.hideAndSeekRewardCopper = {gold * 10000}"
+            f"/script AldricBotAddonDB.hideAndSeekActive = true; AldricBotAddonDB.hideAndSeekRewardCopper = {copper}"
         )
-        _send_whisper(sender, f"Hide and seek started with {gold}g reward.")
-        _send_guild_message(f"A game of hide and seek has begun! Find me and earn {gold} gold. The hunt is on!")
+        _send_whisper(sender, f"Hide and seek started with {memory.format_money(copper)} reward.")
+        _send_guild_message(f"A game of hide and seek has begun! Find me and earn {memory.format_money(copper)}. The hunt is on!")
         _log(f"Admin: started hide and seek ({gold}g) by {sender}")
         return "ok"
 
