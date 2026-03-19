@@ -248,9 +248,12 @@ def read_game_state():
         variables = lua_io.read_saved_variables(path)
         db = variables.get("AldricBotAddonDB", {})
         raw = db.get("lastState")
-        if isinstance(raw, str):
-            return json.loads(raw)
-        return {}
+        state = json.loads(raw) if isinstance(raw, str) else {}
+        # Merge persistent trade flag directly from DB — survives OnUpdate timing gaps
+        trade_flag = db.get("tradeCompletedWith")
+        if trade_flag:
+            state["tradeCompletedWith"] = trade_flag
+        return state
     except Exception as e:
         _log(f"Error reading game state: {e}")
         return {}

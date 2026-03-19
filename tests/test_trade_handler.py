@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from aldricbot import memory
 from aldricbot.events import EventContext
 from aldricbot.trade_handler import TradeHandler, complete_hide_and_seek_trade
+from daemon import read_game_state
 
 
 @pytest.fixture
@@ -158,3 +161,48 @@ def test_direct_complete_clears_addon_flags(mock_send_chat, active_game):
     assert any("hideAndSeekActive = false" in t for t in sent)
     assert any("tradeCompletedWith = nil" in t for t in sent)
     assert any("tradePartnerName = nil" in t for t in sent)
+
+
+# ── read_game_state() DB merge ─────────────────────────────
+
+
+def _write_sv(tmp_path, last_state_dict, **db_fields):
+    """Write a minimal SavedVariables file and return the Path."""
+    sv = tmp_path / "AldricBotAddon.lua"
+    last_state_json = json.dumps(last_state_dict)
+    extra = ""
+    for k, v in db_fields.items():
+        extra += f'  ["{k}"] = "{v}",\n'
+    sv.write_text(
+        f'AldricBotAddonDB = {{\n'
+        f"  [\"lastState\"] = '{last_state_json}',\n"
+        f'{extra}'
+        f'}}\n'
+    )
+    return sv
+
+
+def test_read_game_state_merges_direct_trade_flag(tmp_path, monkeypatch):
+    """Direct DB tradeCompletedWith is merged when lastState lacks it."""
+    sv = _write_sv(tmp_path, {"hideAndSeekActive": True}, tradeCompletedWith="Fenwick")
+    monkeypatch.setattr("daemon.config.saved_variables_path", lambda: sv)
+    state = read_game_state()
+    assert state["tradeCompletedWith"] == "Fenwick"
+    assert state["hideAndSeekActive"] is True
+
+
+def test_read_game_state_no_trade_flag(tmp_path, monkeypatch):
+    """State is unchanged when neither lastState nor DB has the flag."""
+    sv = _write_sv(tmp_path, {"hideAndSeekActive": True})
+    monkeypatch.setattr("daemon.config.saved_variables_path", lambda: sv)
+    state = read_game_state()
+    assert state.get("tradeCompletedWith") is None
+    assert state["hideAndSeekActive"] is True
+
+
+def test_read_game_state_both_have_flag(tmp_path, monkeypatch):
+    """Direct DB flag wins when both lastState and DB have tradeCompletedWith."""
+    sv = _write_sv(tmp_path, {"tradeCompletedWith": "OldName"}, tradeCompletedWith="Fenwick")
+    monkeypatch.setattr("daemon.config.saved_variables_path", lambda: sv)
+    state = read_game_state()
+    assert state["tradeCompletedWith"] == "Fenwick"
