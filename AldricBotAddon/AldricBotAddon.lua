@@ -214,6 +214,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             if msg:lower():find("trade complete") then
                 HandleTradeComplete()
             else
+                if hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive then
+                    AldricBotAddon:Print("H&S UI_ERROR_MESSAGE: " .. msg)
+                end
                 AddMessage("error", msg)
             end
         end
@@ -287,6 +290,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "UI_INFO_MESSAGE" then
         local _, msg = ...
+        if hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive then
+            AldricBotAddon:Print("H&S UI_INFO_MESSAGE: " .. tostring(msg))
+        end
         if msg and msg:lower():find("trade complete") then
             HandleTradeComplete()
         end
@@ -372,6 +378,9 @@ initFrame:SetScript("OnEvent", function(self, event, arg1)
         if not AldricBotAddonDB.hideAndSeekActive then
             AldricBotAddonDB.tradeCompletedWith = nil
             AldricBotAddonDB.tradePartnerName = nil
+            AldricBotAddon:Print("ADDON_LOADED: hs inactive, clearing trade flags")
+        else
+            AldricBotAddon:Print("ADDON_LOADED: hs active, preserving trade flags")
         end
 
         -- Process command queue (batch execution)

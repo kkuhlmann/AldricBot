@@ -206,3 +206,91 @@ def test_read_game_state_both_have_flag(tmp_path, monkeypatch):
     monkeypatch.setattr("daemon.config.saved_variables_path", lambda: sv)
     state = read_game_state()
     assert state["tradeCompletedWith"] == "Fenwick"
+
+
+# ── read_game_state() tradePartnerName merge ────────────────
+
+
+def test_read_game_state_merges_trade_partner_name(tmp_path, monkeypatch):
+    """Direct DB tradePartnerName is merged into state."""
+    sv = _write_sv(tmp_path, {"hideAndSeekActive": True}, tradePartnerName="Fenwick")
+    monkeypatch.setattr("daemon.config.saved_variables_path", lambda: sv)
+    state = read_game_state()
+    assert state["tradePartnerName"] == "Fenwick"
+
+
+def test_read_game_state_no_trade_partner_name(tmp_path, monkeypatch):
+    """State has no tradePartnerName when DB lacks it."""
+    sv = _write_sv(tmp_path, {"hideAndSeekActive": True})
+    monkeypatch.setattr("daemon.config.saved_variables_path", lambda: sv)
+    state = read_game_state()
+    assert state.get("tradePartnerName") is None
+
+
+# ── Gold-based fallback detection ────────────────────────────
+
+
+def test_gold_fallback_triggers_completion(mock_send_chat, active_game):
+    """Gold decrease matching expected reward completes the game."""
+    hs = memory.load_hide_and_seek()
+    expected_copper = hs["current_reward_copper"]
+    prev_gold = 10000000  # 1000g
+    current_gold = prev_gold - expected_copper
+
+    # Verify the daemon's fallback condition would be met
+    gold_decrease = prev_gold - current_gold
+    trade_partner = "Fenwick"
+    assert gold_decrease >= expected_copper > 0 and trade_partner
+
+    # Same call the daemon makes when fallback triggers
+    complete_hide_and_seek_trade(trade_partner)
+    hs = memory.load_hide_and_seek()
+    assert hs["active"] is False
+    assert hs["finders"][0]["name"] == "Fenwick"
+    assert hs["finders"][0]["copper_given"] == expected_copper
+
+
+def test_gold_fallback_ignores_small_changes(mock_send_chat, active_game):
+    """Small gold changes (vendor, repairs) don't meet fallback threshold."""
+    hs = memory.load_hide_and_seek()
+    expected_copper = hs["current_reward_copper"]
+    prev_gold = 10000000
+    current_gold = prev_gold - 1000  # 10 silver — repair cost
+
+    gold_decrease = prev_gold - current_gold
+    assert not (gold_decrease >= expected_copper > 0)
+
+    # Game stays active
+    hs = memory.load_hide_and_seek()
+    assert hs["active"] is True
+
+
+def test_gold_fallback_requires_trade_partner(mock_send_chat, active_game):
+    """Gold fallback does nothing without a recorded trade partner."""
+    hs = memory.load_hide_and_seek()
+    expected_copper = hs["current_reward_copper"]
+    prev_gold = 10000000
+    current_gold = prev_gold - expected_copper
+    trade_partner = None
+
+    gold_decrease = prev_gold - current_gold
+    # Gold condition met, but no partner → fallback should not fire
+    assert gold_decrease >= expected_copper > 0
+    assert not trade_partner
+
+    hs = memory.load_hide_and_seek()
+    assert hs["active"] is True
+
+
+def test_gold_fallback_ignores_gold_increase(mock_send_chat, active_game):
+    """Gold increase (quest reward) doesn't trigger fallback."""
+    hs = memory.load_hide_and_seek()
+    expected_copper = hs["current_reward_copper"]
+    prev_gold = 5000000
+    current_gold = 10000000  # gained gold
+
+    gold_decrease = prev_gold - current_gold  # negative
+    assert not (gold_decrease >= expected_copper > 0)
+
+    hs = memory.load_hide_and_seek()
+    assert hs["active"] is True

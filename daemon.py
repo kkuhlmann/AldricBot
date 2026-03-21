@@ -253,6 +253,9 @@ def read_game_state():
         trade_flag = db.get("tradeCompletedWith")
         if trade_flag:
             state["tradeCompletedWith"] = trade_flag
+        trade_partner = db.get("tradePartnerName")
+        if trade_partner:
+            state["tradePartnerName"] = trade_partner
         return state
     except Exception as e:
         _log(f"Error reading game state: {e}")
@@ -433,6 +436,7 @@ def main():
         _log("Re-authenticate via SSH: claude auth login")
         auth_ok = False
 
+    prev_gold = None
     try:
         while True:
             if shutdown_requested:
@@ -448,8 +452,10 @@ def main():
 
             if hs_active:
                 copper = hs.get("current_reward_copper", hs.get("reward_copper", 0))
+                _log(f"H&S trade: SetTradeMoney({copper})")
                 input_control.send_chat_command(f"/script SetTradeMoney({copper})")
                 time.sleep(1)
+                _log("H&S trade: clicking TradeFrameTradeButton x3")
                 for _ in range(3):
                     input_control.send_chat_command("/click TradeFrameTradeButton")
                     time.sleep(1)
@@ -460,6 +466,13 @@ def main():
 
             state = read_game_state()
             cycle += 1
+
+            # Gold tracking for H&S fallback detection
+            current_gold = state.get("playerGold")
+            if hs_active:
+                _log(f"H&S cycle {cycle}: tradeCompletedWith={state.get('tradeCompletedWith')!r}, "
+                     f"tradePartnerName={state.get('tradePartnerName')!r}, "
+                     f"playerGold={current_gold}, prev_gold={prev_gold}")
 
             # Periodic auth health check
             if cycle >= next_auth_check:
@@ -487,6 +500,19 @@ def main():
             if trade_completed_with and hs_active:
                 complete_hide_and_seek_trade(trade_completed_with)
                 hs_active = False  # prevent duplicate processing this cycle
+
+            # Gold-based fallback: detect trade completion via gold decrease
+            if hs_active and prev_gold is not None and current_gold is not None:
+                expected_copper = hs.get("current_reward_copper", hs.get("reward_copper", 0))
+                gold_decrease = prev_gold - current_gold
+                trade_partner = state.get("tradePartnerName")
+                if gold_decrease >= expected_copper > 0 and trade_partner:
+                    _log(f"H&S gold fallback triggered: gold decreased by {gold_decrease} "
+                         f"(expected {expected_copper}), partner: {trade_partner}")
+                    complete_hide_and_seek_trade(trade_partner)
+                    hs_active = False
+
+            prev_gold = current_gold
 
             # Extract zone info for prompts
             player = state.get("player", {})

@@ -18,6 +18,7 @@ def complete_hide_and_seek_trade(finder_name: str) -> None:
     """
     hs = memory.load_hide_and_seek()
     if not hs.get("active") or not finder_name:
+        _log(f"complete_hide_and_seek_trade early return: active={hs.get('active')}, finder={finder_name!r}")
         return
 
     copper_given = hs.get("current_reward_copper", hs.get("reward_copper", 0))
@@ -57,5 +58,6 @@ class TradeHandler(EventHandler):
     event_types = ["trade_complete"]
 
     def handle(self, msg, ctx):
+        _log(f"TradeHandler.handle() invoked: text={msg.get('text')!r}")
         complete_hide_and_seek_trade(msg.get("text", ""))
         return True

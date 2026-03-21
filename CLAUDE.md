@@ -93,6 +93,13 @@ Movement uses keyboard simulation (not SavedVariables), so it works independentl
 - `turn_left(duration)` / `turn_right(duration)` - turn (~0.45s = 90 degrees)
 - `jump()` - jump
 
+## Development
+
+Run tests with the project virtualenv:
+```
+.venv/bin/python -m pytest tests/ -v
+```
+
 ## Maintenance
 
 After any change to commands, flags, project structure, or user-facing behavior, check that `README.md` is still accurate and update it if needed. The README is the primary user-facing documentation.

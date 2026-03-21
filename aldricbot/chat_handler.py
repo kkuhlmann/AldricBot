@@ -743,6 +743,10 @@ class ChatHandler(EventHandler):
         # Fallback: if JSON parsing failed, extract the hint text directly
         if not commands:
             raw = result.stdout.strip()
+            # Strip "Sources" section (WebSearch citation block)
+            raw = re.split(r"(?im)^sources\s*:?\s*$", raw)[0].strip()
+            # Try to extract a /g command if one is embedded in the text
+            g_match = re.search(r"/g .+", raw)
             # Strip code fences
             if raw.startswith("```"):
                 lines = raw.split("\n")
@@ -750,6 +754,9 @@ class ChatHandler(EventHandler):
             # Strip surrounding quotes
             if (raw.startswith('"') and raw.endswith('"')) or (raw.startswith("'") and raw.endswith("'")):
                 raw = raw[1:-1]
+            # Prefer extracted /g command if code-fence stripping mangled things
+            if g_match:
+                raw = g_match.group(0)
             # Strip /g prefix if present, then re-add it
             if raw.lower().startswith("/g "):
                 raw = raw[3:]
