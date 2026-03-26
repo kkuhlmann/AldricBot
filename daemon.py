@@ -450,17 +450,6 @@ def main():
             hs = memory.load_hide_and_seek()
             hs_active = hs.get("active", False)
 
-            if hs_active:
-                copper = hs.get("current_reward_copper", hs.get("reward_copper", 0))
-                _log(f"H&S trade: SetTradeMoney({copper})")
-                input_control.send_chat_command(f"/script SetTradeMoney({copper})")
-                time.sleep(1)
-                _log("H&S trade: clicking TradeFrameTradeButton x3")
-                for _ in range(3):
-                    input_control.send_chat_command("/click TradeFrameTradeButton")
-                    time.sleep(1)
-                time.sleep(2)  # let trade complete before /reload
-
             send_reload()
             time.sleep(CYCLE_SECONDS)
 
@@ -585,6 +574,16 @@ def main():
             if not had_messages and cycle % AFK_SIT_EVERY == 0:
                 _log(f"AFK sit/stand (cycle {cycle})")
                 do_afk_sit()
+
+            # Hide-and-seek trade setup — after processing, before next /reload
+            hs = memory.load_hide_and_seek()
+            if hs.get("active", False):
+                copper = hs.get("current_reward_copper", hs.get("reward_copper", 0))
+                _log(f"H&S trade: SetTradeMoney({copper}), clicking TradeFrameTradeButton")
+                input_control.send_chat_command(f"/script SetTradeMoney({copper})")
+                time.sleep(1)
+                input_control.send_chat_command("/click TradeFrameTradeButton")
+                time.sleep(2)
     except KeyboardInterrupt:
         _log("Interrupted by user (KeyboardInterrupt)")
     except Exception as e:

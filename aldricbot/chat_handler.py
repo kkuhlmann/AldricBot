@@ -390,19 +390,20 @@ class ChatHandler(EventHandler):
                 if ctx.sub_zone:
                     location_line += f" — {ctx.sub_zone}"
                 location_line += "\n"
-            msg_sender_zone = msg.get("senderZone", "")
-            if msg_sender_zone:
-                location_line += f"The sender is currently in: {msg_sender_zone}\n"
-            if location_line:
-                location_line += "Reference locations naturally when it fits.\n"
+        msg_sender_zone = msg.get("senderZone", "")
+        if msg_sender_zone:
+            location_line += f"The sender is currently in: {msg_sender_zone}\n"
+        if location_line:
+            location_line += "Reference locations naturally when it fits.\n"
 
         hide_seek_line = ""
         if hide_and_seek_active:
             hide_seek_line = (
                 "IMPORTANT: You are currently playing hide and seek with your guild. "
-                "Do NOT reveal your location, zone, sub-zone, nearby landmarks, NPCs, or any geographical clues. "
+                "Do NOT reveal YOUR location, zone, sub-zone, nearby landmarks, NPCs, or any geographical clues about where YOU are. "
                 "If asked where you are, be evasive and playful — remind them that's the game. "
-                "Only the hint system should give location information.\n"
+                "Only the hint system should give information about your location. "
+                "You may still reference where OTHER players are based on their guild roster location.\n"
             )
 
         sender_parts = []
@@ -757,6 +758,11 @@ class ChatHandler(EventHandler):
             # Prefer extracted /g command if code-fence stripping mangled things
             if g_match:
                 raw = g_match.group(0)
+                # Strip JSON array closing syntax the regex may have captured
+                for suffix in ('"]', "']"):
+                    if raw.endswith(suffix):
+                        raw = raw[:-len(suffix)].rstrip()
+                        break
             # Strip /g prefix if present, then re-add it
             if raw.lower().startswith("/g "):
                 raw = raw[3:]

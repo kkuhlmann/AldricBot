@@ -474,7 +474,8 @@ def test_stranger_no_sentence_limit_in_prompt(handler, make_msg, default_ctx, mo
 
 def test_disposition_injected_when_not_neutral(handler, make_msg, default_ctx, mock_send_chat, mock_claude, seed_guildmate):
     """Non-neutral disposition is injected into the prompt."""
-    seed_guildmate("Fenwick", summary="A warrior.", friendliness=-4.0, last_seen="2026-03-12")
+    seed_guildmate("Fenwick", summary="A warrior.", friendliness=-4.0,
+                   last_seen=datetime.now().strftime("%Y-%m-%d"))
     mock_claude(stdout=json.dumps({"commands": ["/g Hmph."], "memory": None, "friendliness": 0}))
     msg = make_msg("guild", "Fenwick", "Hey Aldric, hello")
     handler.handle(msg, default_ctx)
@@ -984,6 +985,38 @@ def test_admin_stop_hide_and_seek_not_active(handler, make_msg, mock_send_chat):
     handler.handle(msg, ctx)
     sent = [str(c) for c in mock_send_chat.call_args_list]
     assert any("no hunt" in t.lower() for t in sent)
+
+
+def test_hide_and_seek_hint_strips_json_array_suffix(handler, make_msg, mock_send_chat, mock_claude):
+    """Raw text fallback strips trailing '"]' from greedy regex match."""
+    memory.save_hide_and_seek({
+        "active": True, "finders": [], "reward_copper": 5000000, "current_reward_copper": 5000000,
+        "hint_count": 0, "hints": [],
+    })
+    # Simulate Claude returning JSON array with trailing Sources that break parsing
+    raw_output = '["/g The bones of a dragon watch over this place..."]\n\nSources:\n[1] some-url'
+    mock_claude(stdout=raw_output)
+    ctx = EventContext(auth_ok=True, admin_name=None, zone="Dragonblight", sub_zone="Dragon's Fall")
+    msg = make_msg("guild", "Fenwick", "Hey Aldric, give me a hint")
+    handler.handle(msg, ctx)
+    sent = [str(c) for c in mock_send_chat.call_args_list]
+    # The sent message should NOT contain '"]'
+    for t in sent:
+        if "bones" in t.lower():
+            assert '"]' not in t
+
+
+def test_sender_zone_in_prompt_during_hide_and_seek(handler, make_msg, mock_send_chat, mock_claude):
+    """Sender's location should still appear in the prompt even when hide-and-seek is active."""
+    memory.save_hide_and_seek({"active": True, "finders": [], "reward_copper": 5000000, "current_reward_copper": 5000000})
+    mock_claude(stdout=json.dumps({"commands": ["/g Aye."], "memory": None}))
+    ctx = EventContext(auth_ok=True, admin_name=None, zone="Elwynn Forest", sub_zone="Goldshire")
+    msg = make_msg("guild", "Fenwick", "Hey Aldric, where are you?", senderZone="Stormwind City")
+    handler.handle(msg, ctx)
+    prompt = mock_claude.mock.call_args[0][0][-1]
+    assert "The sender is currently in: Stormwind City" in prompt
+    # Aldric's own location should NOT appear
+    assert "Your location:" not in prompt
 
 
 def test_thinking_emote_no_consecutive_repeats(handler, make_msg, default_ctx, mock_send_chat, mock_claude):
