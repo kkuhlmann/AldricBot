@@ -490,14 +490,17 @@ def main():
                 complete_hide_and_seek_trade(trade_completed_with)
                 hs_active = False  # prevent duplicate processing this cycle
 
-            # Gold-based fallback: detect trade completion via gold decrease
+            # Gold-based fallback: detect trade completion via gold change
+            # Aldric pays the reward; the finder may also give gold (tip/gift),
+            # so net change can be less than expected, zero, or even positive.
+            # Any non-zero gold change + known trade partner = completed trade.
             if hs_active and prev_gold is not None and current_gold is not None:
-                expected_copper = hs.get("current_reward_copper", hs.get("reward_copper", 0))
-                gold_decrease = prev_gold - current_gold
                 trade_partner = state.get("tradePartnerName")
-                if gold_decrease >= expected_copper > 0 and trade_partner:
-                    _log(f"H&S gold fallback triggered: gold decreased by {gold_decrease} "
-                         f"(expected {expected_copper}), partner: {trade_partner}")
+                if trade_partner and prev_gold != current_gold:
+                    expected_copper = hs.get("current_reward_copper", hs.get("reward_copper", 0))
+                    gold_change = current_gold - prev_gold
+                    _log(f"H&S gold fallback triggered: gold changed by {gold_change:+d} "
+                         f"(expected -{expected_copper}), partner: {trade_partner}")
                     complete_hide_and_seek_trade(trade_partner)
                     hs_active = False
 
