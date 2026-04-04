@@ -236,11 +236,10 @@ def test_gold_fallback_triggers_completion(mock_send_chat, active_game):
     expected_copper = hs["current_reward_copper"]
     prev_gold = 10000000  # 1000g
     current_gold = prev_gold - expected_copper
+    trade_partner = "Fenwick"
 
     # Verify the daemon's fallback condition would be met
-    gold_decrease = prev_gold - current_gold
-    trade_partner = "Fenwick"
-    assert gold_decrease >= expected_copper > 0 and trade_partner
+    assert trade_partner and prev_gold != current_gold
 
     # Same call the daemon makes when fallback triggers
     complete_hide_and_seek_trade(trade_partner)
@@ -250,15 +249,13 @@ def test_gold_fallback_triggers_completion(mock_send_chat, active_game):
     assert hs["finders"][0]["copper_given"] == expected_copper
 
 
-def test_gold_fallback_ignores_small_changes(mock_send_chat, active_game):
-    """Small gold changes (vendor, repairs) don't meet fallback threshold."""
-    hs = memory.load_hide_and_seek()
-    expected_copper = hs["current_reward_copper"]
+def test_gold_fallback_ignores_no_change(mock_send_chat, active_game):
+    """No gold change doesn't trigger fallback even with trade partner."""
     prev_gold = 10000000
-    current_gold = prev_gold - 1000  # 10 silver — repair cost
+    current_gold = 10000000
+    trade_partner = "Fenwick"
 
-    gold_decrease = prev_gold - current_gold
-    assert not (gold_decrease >= expected_copper > 0)
+    assert not (trade_partner and prev_gold != current_gold)
 
     # Game stays active
     hs = memory.load_hide_and_seek()
@@ -273,24 +270,55 @@ def test_gold_fallback_requires_trade_partner(mock_send_chat, active_game):
     current_gold = prev_gold - expected_copper
     trade_partner = None
 
-    gold_decrease = prev_gold - current_gold
-    # Gold condition met, but no partner → fallback should not fire
-    assert gold_decrease >= expected_copper > 0
-    assert not trade_partner
+    # Gold changed, but no partner → fallback should not fire
+    assert prev_gold != current_gold
+    assert not (trade_partner and prev_gold != current_gold)
 
     hs = memory.load_hide_and_seek()
     assert hs["active"] is True
 
 
-def test_gold_fallback_ignores_gold_increase(mock_send_chat, active_game):
-    """Gold increase (quest reward) doesn't trigger fallback."""
+def test_gold_fallback_triggers_when_finder_gives_gold(mock_send_chat, active_game):
+    """Finder gives more gold than reward — net gold increases — still triggers."""
     hs = memory.load_hide_and_seek()
     expected_copper = hs["current_reward_copper"]
-    prev_gold = 5000000
-    current_gold = 10000000  # gained gold
+    prev_gold = 10000000
+    current_gold = prev_gold + 5000000  # finder gave more than reward
+    trade_partner = "Fenwick"
 
-    gold_decrease = prev_gold - current_gold  # negative
-    assert not (gold_decrease >= expected_copper > 0)
+    assert trade_partner and prev_gold != current_gold
+
+    complete_hide_and_seek_trade(trade_partner)
+    hs = memory.load_hide_and_seek()
+    assert hs["active"] is False
+    assert hs["finders"][0]["name"] == "Fenwick"
+
+
+def test_gold_fallback_triggers_on_partial_decrease(mock_send_chat, active_game):
+    """Finder offsets some of the reward — smaller decrease — still triggers."""
+    hs = memory.load_hide_and_seek()
+    expected_copper = hs["current_reward_copper"]
+    prev_gold = 10000000
+    # Finder gave back half the reward, so net decrease is only half
+    current_gold = prev_gold - (expected_copper // 2)
+    trade_partner = "Fenwick"
+
+    assert trade_partner and prev_gold != current_gold
+
+    complete_hide_and_seek_trade(trade_partner)
+    hs = memory.load_hide_and_seek()
+    assert hs["active"] is False
+    assert hs["finders"][0]["name"] == "Fenwick"
+
+
+def test_gold_fallback_no_trigger_on_zero_change(mock_send_chat, active_game):
+    """Finder gives exactly the reward amount — net zero — does NOT trigger."""
+    prev_gold = 10000000
+    current_gold = 10000000  # net zero
+    trade_partner = "Fenwick"
+
+    # Documents the known edge case: exact offset means no gold change
+    assert not (trade_partner and prev_gold != current_gold)
 
     hs = memory.load_hide_and_seek()
     assert hs["active"] is True
