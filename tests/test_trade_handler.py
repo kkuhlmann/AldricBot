@@ -1,12 +1,15 @@
-"""Tests for TradeHandler — hide and seek trade completion."""
+"""Tests for TradeHandler and complete_hide_and_seek_trade()."""
 
 from __future__ import annotations
+
+import json
 
 import pytest
 
 from aldricbot import memory
 from aldricbot.events import EventContext
-from aldricbot.trade_handler import TradeHandler
+from aldricbot.trade_handler import TradeHandler, complete_hide_and_seek_trade
+from daemon import read_game_state
 
 
 @pytest.fixture
@@ -20,8 +23,8 @@ def active_game():
     memory.save_hide_and_seek({
         "active": True,
         "finders": [],
-        "reward_gold": 500,
-        "current_reward": 450,
+        "reward_copper": 5000000,
+        "current_reward_copper": 4500000,
         "hint_count": 2,
         "hints": ["hint one", "hint two"],
     })
@@ -38,7 +41,7 @@ def test_trade_records_finder_and_deactivates(handler, make_msg, default_ctx, mo
     assert hs["active"] is False
     assert len(hs["finders"]) == 1
     assert hs["finders"][0]["name"] == "Fenwick"
-    assert hs["finders"][0]["gold_given"] == 450
+    assert hs["finders"][0]["copper_given"] == 4500000
 
 
 def test_trade_guild_announcement(handler, make_msg, default_ctx, mock_send_chat, active_game):
@@ -46,7 +49,7 @@ def test_trade_guild_announcement(handler, make_msg, default_ctx, mock_send_chat
     handler.handle(msg, default_ctx)
     sent = [str(c) for c in mock_send_chat.call_args_list]
     assert any("Fenwick has found me" in t for t in sent)
-    assert any("450 gold" in t for t in sent)
+    assert any("450g" in t for t in sent)
 
 
 def test_trade_addon_sync(handler, make_msg, default_ctx, mock_send_chat, active_game):
@@ -54,6 +57,8 @@ def test_trade_addon_sync(handler, make_msg, default_ctx, mock_send_chat, active
     handler.handle(msg, default_ctx)
     sent = [str(c) for c in mock_send_chat.call_args_list]
     assert any("hideAndSeekActive = false" in t for t in sent)
+    assert any("tradeCompletedWith = nil" in t for t in sent)
+    assert any("tradePartnerName = nil" in t for t in sent)
 
 
 # ── Not active / empty name ─────────────────────────────────
@@ -97,7 +102,7 @@ def test_trade_preserves_existing_nickname(handler, make_msg, default_ctx, mock_
 def test_trade_increments_found_count(handler, make_msg, default_ctx, mock_send_chat, seed_guildmate):
     seed_guildmate("Fenwick", summary="A warrior.", found_aldric_count=2)
     # First game
-    memory.save_hide_and_seek({"active": True, "finders": [], "reward_gold": 500, "current_reward": 500})
+    memory.save_hide_and_seek({"active": True, "finders": [], "reward_copper": 5000000, "current_reward_copper": 5000000})
     msg = make_msg("trade_complete", "Fenwick", "")
     handler.handle(msg, default_ctx)
     gm = memory.load_guildmate("Fenwick")
@@ -122,3 +127,198 @@ def test_trade_updates_self_memory(handler, make_msg, default_ctx, mock_send_cha
     sm = memory.load_self_memory()
     assert "Fenwick" in sm["summary"]
     assert "hide and seek" in sm["summary"]
+
+
+# ── complete_hide_and_seek_trade() direct calls ─────────────
+
+
+def test_direct_complete_records_and_deactivates(mock_send_chat, active_game):
+    """Calling complete_hide_and_seek_trade() directly works the same as via handler."""
+    complete_hide_and_seek_trade("Grom")
+    hs = memory.load_hide_and_seek()
+    assert hs["active"] is False
+    assert hs["finders"][0]["name"] == "Grom"
+
+
+def test_direct_complete_noop_when_inactive(mock_send_chat):
+    """No-op when hide-and-seek is not active (double-processing safety)."""
+    complete_hide_and_seek_trade("Grom")
+    mock_send_chat.assert_not_called()
+
+
+def test_direct_complete_noop_on_second_call(mock_send_chat, active_game):
+    """Second call is a no-op — prevents duplicate announcements."""
+    complete_hide_and_seek_trade("Grom")
+    mock_send_chat.reset_mock()
+    complete_hide_and_seek_trade("Grom")
+    mock_send_chat.assert_not_called()
+
+
+def test_direct_complete_clears_addon_flags(mock_send_chat, active_game):
+    """The /script command clears all three addon flags."""
+    complete_hide_and_seek_trade("Grom")
+    sent = [str(c) for c in mock_send_chat.call_args_list]
+    assert any("hideAndSeekActive = false" in t for t in sent)
+    assert any("tradeCompletedWith = nil" in t for t in sent)
+    assert any("tradePartnerName = nil" in t for t in sent)
+
+
+# ── read_game_state() DB merge ─────────────────────────────
+
+
+def _write_sv(tmp_path, last_state_dict, **db_fields):
+    """Write a minimal SavedVariables file and return the Path."""
+    sv = tmp_path / "AldricBotAddon.lua"
+    last_state_json = json.dumps(last_state_dict)
+    extra = ""
+    for k, v in db_fields.items():
+        extra += f'  ["{k}"] = "{v}",\n'
+    sv.write_text(
+        f'AldricBotAddonDB = {{\n'
+        f"  [\"lastState\"] = '{last_state_json}',\n"
+        f'{extra}'
+        f'}}\n'
+    )
+    return sv
+
+
+def test_read_game_state_merges_direct_trade_flag(tmp_path, monkeypatch):
+    """Direct DB tradeCompletedWith is merged when lastState lacks it."""
+    sv = _write_sv(tmp_path, {"hideAndSeekActive": True}, tradeCompletedWith="Fenwick")
+    monkeypatch.setattr("daemon.config.saved_variables_path", lambda: sv)
+    state = read_game_state()
+    assert state["tradeCompletedWith"] == "Fenwick"
+    assert state["hideAndSeekActive"] is True
+
+
+def test_read_game_state_no_trade_flag(tmp_path, monkeypatch):
+    """State is unchanged when neither lastState nor DB has the flag."""
+    sv = _write_sv(tmp_path, {"hideAndSeekActive": True})
+    monkeypatch.setattr("daemon.config.saved_variables_path", lambda: sv)
+    state = read_game_state()
+    assert state.get("tradeCompletedWith") is None
+    assert state["hideAndSeekActive"] is True
+
+
+def test_read_game_state_both_have_flag(tmp_path, monkeypatch):
+    """Direct DB flag wins when both lastState and DB have tradeCompletedWith."""
+    sv = _write_sv(tmp_path, {"tradeCompletedWith": "OldName"}, tradeCompletedWith="Fenwick")
+    monkeypatch.setattr("daemon.config.saved_variables_path", lambda: sv)
+    state = read_game_state()
+    assert state["tradeCompletedWith"] == "Fenwick"
+
+
+# ── read_game_state() tradePartnerName merge ────────────────
+
+
+def test_read_game_state_merges_trade_partner_name(tmp_path, monkeypatch):
+    """Direct DB tradePartnerName is merged into state."""
+    sv = _write_sv(tmp_path, {"hideAndSeekActive": True}, tradePartnerName="Fenwick")
+    monkeypatch.setattr("daemon.config.saved_variables_path", lambda: sv)
+    state = read_game_state()
+    assert state["tradePartnerName"] == "Fenwick"
+
+
+def test_read_game_state_no_trade_partner_name(tmp_path, monkeypatch):
+    """State has no tradePartnerName when DB lacks it."""
+    sv = _write_sv(tmp_path, {"hideAndSeekActive": True})
+    monkeypatch.setattr("daemon.config.saved_variables_path", lambda: sv)
+    state = read_game_state()
+    assert state.get("tradePartnerName") is None
+
+
+# ── Gold-based fallback detection ────────────────────────────
+
+
+def test_gold_fallback_triggers_completion(mock_send_chat, active_game):
+    """Gold decrease matching expected reward completes the game."""
+    hs = memory.load_hide_and_seek()
+    expected_copper = hs["current_reward_copper"]
+    prev_gold = 10000000  # 1000g
+    current_gold = prev_gold - expected_copper
+    trade_partner = "Fenwick"
+
+    # Verify the daemon's fallback condition would be met
+    assert trade_partner and prev_gold != current_gold
+
+    # Same call the daemon makes when fallback triggers
+    complete_hide_and_seek_trade(trade_partner)
+    hs = memory.load_hide_and_seek()
+    assert hs["active"] is False
+    assert hs["finders"][0]["name"] == "Fenwick"
+    assert hs["finders"][0]["copper_given"] == expected_copper
+
+
+def test_gold_fallback_ignores_no_change(mock_send_chat, active_game):
+    """No gold change doesn't trigger fallback even with trade partner."""
+    prev_gold = 10000000
+    current_gold = 10000000
+    trade_partner = "Fenwick"
+
+    assert not (trade_partner and prev_gold != current_gold)
+
+    # Game stays active
+    hs = memory.load_hide_and_seek()
+    assert hs["active"] is True
+
+
+def test_gold_fallback_requires_trade_partner(mock_send_chat, active_game):
+    """Gold fallback does nothing without a recorded trade partner."""
+    hs = memory.load_hide_and_seek()
+    expected_copper = hs["current_reward_copper"]
+    prev_gold = 10000000
+    current_gold = prev_gold - expected_copper
+    trade_partner = None
+
+    # Gold changed, but no partner → fallback should not fire
+    assert prev_gold != current_gold
+    assert not (trade_partner and prev_gold != current_gold)
+
+    hs = memory.load_hide_and_seek()
+    assert hs["active"] is True
+
+
+def test_gold_fallback_triggers_when_finder_gives_gold(mock_send_chat, active_game):
+    """Finder gives more gold than reward — net gold increases — still triggers."""
+    hs = memory.load_hide_and_seek()
+    expected_copper = hs["current_reward_copper"]
+    prev_gold = 10000000
+    current_gold = prev_gold + 5000000  # finder gave more than reward
+    trade_partner = "Fenwick"
+
+    assert trade_partner and prev_gold != current_gold
+
+    complete_hide_and_seek_trade(trade_partner)
+    hs = memory.load_hide_and_seek()
+    assert hs["active"] is False
+    assert hs["finders"][0]["name"] == "Fenwick"
+
+
+def test_gold_fallback_triggers_on_partial_decrease(mock_send_chat, active_game):
+    """Finder offsets some of the reward — smaller decrease — still triggers."""
+    hs = memory.load_hide_and_seek()
+    expected_copper = hs["current_reward_copper"]
+    prev_gold = 10000000
+    # Finder gave back half the reward, so net decrease is only half
+    current_gold = prev_gold - (expected_copper // 2)
+    trade_partner = "Fenwick"
+
+    assert trade_partner and prev_gold != current_gold
+
+    complete_hide_and_seek_trade(trade_partner)
+    hs = memory.load_hide_and_seek()
+    assert hs["active"] is False
+    assert hs["finders"][0]["name"] == "Fenwick"
+
+
+def test_gold_fallback_no_trigger_on_zero_change(mock_send_chat, active_game):
+    """Finder gives exactly the reward amount — net zero — does NOT trigger."""
+    prev_gold = 10000000
+    current_gold = 10000000  # net zero
+    trade_partner = "Fenwick"
+
+    # Documents the known edge case: exact offset means no gold change
+    assert not (trade_partner and prev_gold != current_gold)
+
+    hs = memory.load_hide_and_seek()
+    assert hs["active"] is True

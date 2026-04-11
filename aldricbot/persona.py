@@ -125,6 +125,13 @@ def get_levelup_reactions(persona: dict | None) -> list[str]:
     return persona.get("responses", {}).get("levelup_reactions", [])
 
 
+def get_guild_invite_responses(persona: dict | None) -> list[str]:
+    """Return guild invite responses from persona, or empty list."""
+    if persona is None:
+        return []
+    return persona.get("responses", {}).get("guild_invite", [])
+
+
 # ── CLI entry point ────────────────────────────────────────────
 
 def main() -> None:

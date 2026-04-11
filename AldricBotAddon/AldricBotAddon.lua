@@ -96,6 +96,7 @@ local function CollectState()
         player           = GetPlayerInfo(),
         chatMessages     = messageBuffer,
         hideAndSeekActive = hideAndSeekActive,
+        tradeCompletedWith = AldricBotAddonDB.tradeCompletedWith,
         playerGold       = GetMoney(),
     }
 end
@@ -159,6 +160,34 @@ local function ExecuteCommand(cmd)
 end
 
 -- ============================================================
+-- TRADE COMPLETION HANDLER
+-- Extracted for reuse across UI_INFO_MESSAGE and UI_ERROR_MESSAGE
+-- ============================================================
+
+local function HandleTradeComplete()
+    local partner = tradePartnerName
+        or AldricBotAddonDB.tradePartnerName
+    if not partner and TradeFrameRecipientNameText then
+        partner = TradeFrameRecipientNameText:GetText()
+    end
+    if not partner then
+        partner = UnitName("NPC")
+    end
+    if partner and partner ~= "" and (hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive) then
+        AldricBotAddon:Print("H&S trade complete with: " .. partner)
+        local senderInfo = GetGuildMemberInfo(partner)
+        AddMessage("trade_complete", partner, senderInfo)
+        AldricBotAddonDB.tradeCompletedWith = partner
+        tradePartnerName = nil
+        AldricBotAddonDB.tradePartnerName = nil
+    else
+        AldricBotAddon:Print("Trade complete but H&S not met — partner: "
+            .. tostring(partner) .. ", active: "
+            .. tostring(hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive))
+    end
+end
+
+-- ============================================================
 -- EVENT HANDLERS
 -- Guild chat, party chat, whispers, system messages, errors
 -- ============================================================
@@ -182,7 +211,14 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "UI_ERROR_MESSAGE" then
         local _, msg = ...
         if msg then
-            AddMessage("error", msg)
+            if msg:lower():find("trade complete") then
+                HandleTradeComplete()
+            else
+                if hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive then
+                    AldricBotAddon:Print("H&S UI_ERROR_MESSAGE: " .. msg)
+                end
+                AddMessage("error", msg)
+            end
         end
 
     elseif event == "CHAT_MSG_SYSTEM" then
@@ -246,21 +282,19 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
     elseif event == "TRADE_SHOW" then
-        if hideAndSeekActive then
-            tradePartnerName = UnitName("NPC")
-            SetTradeMoney(AldricBotAddonDB.hideAndSeekRewardCopper or 0)
-            AcceptTrade()
+        if hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive then
+            tradePartnerName = UnitName("NPC") or TradeFrameRecipientNameText:GetText()
+            AldricBotAddonDB.tradePartnerName = tradePartnerName
+            AldricBotAddon:Print("H&S trade opened with: " .. tostring(tradePartnerName))
         end
-
-    elseif event == "TRADE_REQUEST_CANCEL" then
-        tradePartnerName = nil
 
     elseif event == "UI_INFO_MESSAGE" then
         local _, msg = ...
-        if msg and msg:find("Trade complete") and tradePartnerName and hideAndSeekActive then
-            local senderInfo = GetGuildMemberInfo(tradePartnerName)
-            AddMessage("trade_complete", tradePartnerName, senderInfo)
-            tradePartnerName = nil
+        if hideAndSeekActive or AldricBotAddonDB.hideAndSeekActive then
+            AldricBotAddon:Print("H&S UI_INFO_MESSAGE: " .. tostring(msg))
+        end
+        if msg and msg:lower():find("trade complete") then
+            HandleTradeComplete()
         end
     end
 end)
@@ -333,6 +367,20 @@ initFrame:SetScript("OnEvent", function(self, event, arg1)
             end
             messageBuffer = fresh
             AldricBotAddonDB.messageHistory = messageBuffer
+        end
+
+        -- Restore trade partner name across /reload
+        if AldricBotAddonDB.tradePartnerName then
+            tradePartnerName = AldricBotAddonDB.tradePartnerName
+        end
+
+        -- Clean stale trade flags when hide-and-seek is not active
+        if not AldricBotAddonDB.hideAndSeekActive then
+            AldricBotAddonDB.tradeCompletedWith = nil
+            AldricBotAddonDB.tradePartnerName = nil
+            AldricBotAddon:Print("ADDON_LOADED: hs inactive, clearing trade flags")
+        else
+            AldricBotAddon:Print("ADDON_LOADED: hs active, preserving trade flags")
         end
 
         -- Process command queue (batch execution)

@@ -82,6 +82,7 @@ The "Hey Aldric" prefix is required for guild, party, and raid chat. For whisper
 | `Hey Aldric, give me a hint`             | Requests a hide and seek hint (up to 5 per game)                           |
 | `Hey Aldric, what are the hints?`        | Shows all hide and seek hints given so far                                 |
 | `Hey Aldric, who's won hide and seek?`   | Shows the hide and seek leaderboard                                        |
+| `Hey Aldric, invite me`                  | Sends you a guild invitation (works from whisper, party, or raid)          |
 | `Hey Aldric, help`                       | Lists available commands                                                   |
 
 ### Admin Only (Whisper)
@@ -131,7 +132,7 @@ The admin can start a hide and seek event where Aldric hides in the world and pl
 | 4 | 200g | Named NPC or feature |
 | 5 | 100g | Exact pinpoint |
 
-Players can request hints with `give me a hint` (also: `hint please`, `another hint`, `next hint`, `any hints`), check the current game status with `are you hiding?`, review all hints with `what are the hints?`, and see the all-time leaderboard with `who's won hide and seek?`.
+Players can request hints with `give me a hint` (also: `tell me a hint`, `hint please`, `another hint`, `next hint`, `any hints`), check the current game status with `are you hiding?`, review all hints with `what are the hints?`, and see the all-time leaderboard with `who's won hide and seek?`.
 
 ## Calendar Awareness
 
@@ -265,6 +266,10 @@ Optional flags:
 | `--admin NAME`                | `ALDRICBOT_ADMIN`       | _(none)_ | Character name that can use admin commands              |
 | `--character NAME`            | `ALDRICBOT_CHARACTER`   | `Aldric` | Character name for greeting prefix and memory isolation |
 | `--persona PATH`              | `ALDRICBOT_PERSONA`     | _(none)_ | Path to persona YAML file                               |
+| `--idle-emotes / --no-idle-emotes` | `ALDRICBOT_IDLE_EMOTES` | enabled | Enable/disable idle emotes                         |
+| `--proactive-rp / --no-proactive-rp` | `ALDRICBOT_PROACTIVE_RP` | enabled | Enable/disable proactive RP messages            |
+| `--emote-cadence MIN-MAX`     | `ALDRICBOT_EMOTE_CADENCE` | `8-12` | Idle emote cadence in minutes                          |
+| `--proactive-cadence MIN-MAX` | `ALDRICBOT_PROACTIVE_CADENCE` | `120-240` | Proactive RP cadence in minutes                  |
 
 ### Stop
 

@@ -199,3 +199,31 @@ class TestLevelUpHandler:
         result = handler.handle(msg, ctx)
         assert result is True
         mock_claude.mock.assert_not_called()
+
+
+# ── _send_commands Unicode sanitization ──────────────────────────
+
+
+class TestSendCommandsUnicode:
+
+    def test_replaces_unicode_characters(self, mock_send_chat):
+        from aldricbot.events import _send_commands
+        cmds = ['/g He said \u201chello\u201d \u2014 it\u2019s a fine\u2026 day']
+        _send_commands(cmds)
+        sent = mock_send_chat.call_args_list[0][0][0]
+        assert "\u201c" not in sent
+        assert "\u201d" not in sent
+        assert "\u2014" not in sent
+        assert "\u2019" not in sent
+        assert "\u2026" not in sent
+        assert '"hello"' in sent
+        assert "--" in sent
+        assert "..." in sent
+
+    def test_replaces_en_dash(self, mock_send_chat):
+        from aldricbot.events import _send_commands
+        cmds = ["/g levels 70\u201380"]
+        _send_commands(cmds)
+        sent = mock_send_chat.call_args_list[0][0][0]
+        assert "\u2013" not in sent
+        assert "70-80" in sent

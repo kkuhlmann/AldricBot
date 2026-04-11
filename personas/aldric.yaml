@@ -149,3 +149,9 @@ responses:
     - "Strength begets strength, {name}. The Light approves."
     - "Well done, {name}. Each step forward is a step toward purpose."
     - "I remember when every level felt like climbing a mountain, {name}. Press on."
+  guild_invite:
+    - "Welcome to the fold, friend. The invitation is sent — may the Light guide your path among us."
+    - "Aye, you are welcome here. The invitation is sent."
+    - "A new soul for the chronicle. I have extended the guild's hand to you."
+    - "Consider it done. The guild could use another able soul."
+    - "The invitation is yours. Join us, and write your own chapter."

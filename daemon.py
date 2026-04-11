@@ -31,7 +31,7 @@ from pathlib import Path
 from aldricbot import calendar, config, input_control, lua_io, memory
 from aldricbot import persona as persona_mod
 from aldricbot.chat_handler import ChatHandler
-from aldricbot.trade_handler import TradeHandler
+from aldricbot.trade_handler import TradeHandler, complete_hide_and_seek_trade
 from aldricbot.events import (
     PERSONA_PROMPT_PATH,
     AchievementHandler,
@@ -128,6 +128,38 @@ PROACTIVE_MIN_CYCLES = 720  # ~2 hours
 PROACTIVE_MAX_CYCLES = 1440  # ~4 hours
 
 
+def _resolve_bool_flag(cli_value, env_name, default=True):
+    """Resolve a boolean flag: CLI overrides env var, env var overrides default."""
+    if cli_value is not None:
+        return cli_value
+    env = os.environ.get(env_name)
+    if env is not None:
+        return env.lower() in ("true", "1", "yes")
+    return default
+
+
+def _parse_cadence(value, default_min_cycles, default_max_cycles):
+    """Parse a 'MIN-MAX' cadence string (in minutes) into (min_cycles, max_cycles).
+
+    Returns (default_min_cycles, default_max_cycles) on invalid input.
+    """
+    if value is None:
+        return default_min_cycles, default_max_cycles
+    try:
+        parts = value.split("-")
+        if len(parts) != 2:
+            raise ValueError(f"expected MIN-MAX, got {value!r}")
+        min_min, max_min = int(parts[0]), int(parts[1])
+        if min_min <= 0 or max_min <= 0 or min_min > max_min:
+            raise ValueError(f"invalid range: {min_min}-{max_min}")
+        min_cycles = min_min * 60 // CYCLE_SECONDS
+        max_cycles = max_min * 60 // CYCLE_SECONDS
+        return min_cycles, max_cycles
+    except (ValueError, TypeError) as e:
+        _log(f"WARNING: Invalid cadence {value!r}: {e} — using defaults")
+        return default_min_cycles, default_max_cycles
+
+
 def _log(msg: str) -> None:
     """Print a timestamped daemon log line."""
     ts = datetime.now().strftime("%H:%M:%S")
@@ -207,6 +239,30 @@ def parse_args():
         default=os.environ.get("ALDRICBOT_PERSONA"),
         help="Path to persona YAML file. Also settable via ALDRICBOT_PERSONA env var.",
     )
+    parser.add_argument(
+        "--idle-emotes",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable/disable idle emotes. Also settable via ALDRICBOT_IDLE_EMOTES env var.",
+    )
+    parser.add_argument(
+        "--proactive-rp",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable/disable proactive RP messages. Also settable via ALDRICBOT_PROACTIVE_RP env var.",
+    )
+    parser.add_argument(
+        "--emote-cadence",
+        type=str,
+        default=None,
+        help="Idle emote cadence as MIN-MAX in minutes (default: 8-12). Also settable via ALDRICBOT_EMOTE_CADENCE env var.",
+    )
+    parser.add_argument(
+        "--proactive-cadence",
+        type=str,
+        default=None,
+        help="Proactive RP cadence as MIN-MAX in minutes (default: 120-240). Also settable via ALDRICBOT_PROACTIVE_CADENCE env var.",
+    )
     return parser.parse_args()
 
 
@@ -236,18 +292,38 @@ def _refresh_session():
     SESSION_START_FILE.write_text(str(time.time()))
 
 
-def do_game_cycle():
-    """Send /reload to WoW and read fresh game state."""
+def send_reload():
+    """Send /reload to WoW."""
+    input_control.send_reload()
+
+
+def read_game_state():
+    """Read fresh game state from SavedVariables."""
     try:
-        input_control.send_reload()
-        time.sleep(CYCLE_SECONDS)
         path = config.saved_variables_path()
         variables = lua_io.read_saved_variables(path)
         db = variables.get("AldricBotAddonDB", {})
         raw = db.get("lastState")
-        if isinstance(raw, str):
-            return json.loads(raw)
+        state = json.loads(raw) if isinstance(raw, str) else {}
+        # Merge persistent trade flag directly from DB — survives OnUpdate timing gaps
+        trade_flag = db.get("tradeCompletedWith")
+        if trade_flag:
+            state["tradeCompletedWith"] = trade_flag
+        trade_partner = db.get("tradePartnerName")
+        if trade_partner:
+            state["tradePartnerName"] = trade_partner
+        return state
+    except Exception as e:
+        _log(f"Error reading game state: {e}")
         return {}
+
+
+def do_game_cycle():
+    """Send /reload to WoW and read fresh game state."""
+    try:
+        send_reload()
+        time.sleep(CYCLE_SECONDS)
+        return read_game_state()
     except Exception as e:
         _log(f"Error in game cycle: {e}")
         return {}
@@ -326,19 +402,19 @@ def invoke_claude_proactive(
 
 
 
-def _random_emote_delay():
-    return random.randint(IDLE_EMOTE_MIN_CYCLES, IDLE_EMOTE_MAX_CYCLES)
+def _random_emote_delay(min_cycles=IDLE_EMOTE_MIN_CYCLES, max_cycles=IDLE_EMOTE_MAX_CYCLES):
+    return random.randint(min_cycles, max_cycles)
 
 
-def _random_proactive_delay():
-    return random.randint(PROACTIVE_MIN_CYCLES, PROACTIVE_MAX_CYCLES)
+def _random_proactive_delay(min_cycles=PROACTIVE_MIN_CYCLES, max_cycles=PROACTIVE_MAX_CYCLES):
+    return random.randint(min_cycles, max_cycles)
 
 
-def _load_proactive_cycle(current_cycle):
+def _load_proactive_cycle(current_cycle, min_cycles=PROACTIVE_MIN_CYCLES, max_cycles=PROACTIVE_MAX_CYCLES):
     try:
         return int(PROACTIVE_TIME_FILE.read_text().strip())
     except (FileNotFoundError, ValueError, OSError):
-        return current_cycle + _random_proactive_delay()
+        return current_cycle + _random_proactive_delay(min_cycles, max_cycles)
 
 
 def _save_proactive_cycle(cycle):
@@ -380,11 +456,27 @@ def main():
     events_mod.init_paths(args.character)
     _init_daemon_paths(args.character)
 
+    # Resolve passive message settings
+    idle_emotes_enabled = _resolve_bool_flag(args.idle_emotes, "ALDRICBOT_IDLE_EMOTES")
+    proactive_rp_enabled = _resolve_bool_flag(args.proactive_rp, "ALDRICBOT_PROACTIVE_RP")
+    emote_min_cycles, emote_max_cycles = _parse_cadence(
+        args.emote_cadence or os.environ.get("ALDRICBOT_EMOTE_CADENCE"),
+        IDLE_EMOTE_MIN_CYCLES, IDLE_EMOTE_MAX_CYCLES,
+    )
+    proactive_min_cycles, proactive_max_cycles = _parse_cadence(
+        args.proactive_cadence or os.environ.get("ALDRICBOT_PROACTIVE_CADENCE"),
+        PROACTIVE_MIN_CYCLES, PROACTIVE_MAX_CYCLES,
+    )
+
     _log(f"Starting AldricBot daemon (PID {os.getpid()})")
     _log(f"Character: {args.character}")
     _log(f"Model: {args.model or 'haiku'}")
     _log(f"Session TTL: {args.session_ttl}h")
     _log(f"Admin: {args.admin or '(none — admin commands disabled)'}")
+    _log(f"Idle emotes: {'enabled' if idle_emotes_enabled else 'disabled'}"
+         f" (cadence: {emote_min_cycles * CYCLE_SECONDS // 60}-{emote_max_cycles * CYCLE_SECONDS // 60} min)")
+    _log(f"Proactive RP: {'enabled' if proactive_rp_enabled else 'disabled'}"
+         f" (cadence: {proactive_min_cycles * CYCLE_SECONDS // 60}-{proactive_max_cycles * CYCLE_SECONDS // 60} min)")
     _log(f"Lock file: {DAEMON_LOCK}")
 
     signal.signal(signal.SIGTERM, _handle_shutdown_signal)
@@ -402,8 +494,8 @@ def main():
     dispatcher.load_timestamps()
 
     cycle = 0
-    next_emote_cycle = _random_emote_delay()
-    next_proactive_cycle = _load_proactive_cycle(0)
+    next_emote_cycle = _random_emote_delay(emote_min_cycles, emote_max_cycles)
+    next_proactive_cycle = _load_proactive_cycle(0, proactive_min_cycles, proactive_max_cycles)
     auth_ok = True
     next_auth_check = AUTH_CHECK_INTERVAL
     next_keepalive = AUTH_KEEPALIVE_INTERVAL
@@ -416,6 +508,7 @@ def main():
         _log("Re-authenticate via SSH: claude auth login")
         auth_ok = False
 
+    prev_gold = None
     try:
         while True:
             if shutdown_requested:
@@ -426,8 +519,21 @@ def main():
                     _log(f"Error sending farewell emote: {e}")
                 break
 
-            state = do_game_cycle()
+            hs = memory.load_hide_and_seek()
+            hs_active = hs.get("active", False)
+
+            send_reload()
+            time.sleep(CYCLE_SECONDS)
+
+            state = read_game_state()
             cycle += 1
+
+            # Gold tracking for H&S fallback detection
+            current_gold = state.get("playerGold")
+            if hs_active:
+                _log(f"H&S cycle {cycle}: tradeCompletedWith={state.get('tradeCompletedWith')!r}, "
+                     f"tradePartnerName={state.get('tradePartnerName')!r}, "
+                     f"playerGold={current_gold}, prev_gold={prev_gold}")
 
             # Periodic auth health check
             if cycle >= next_auth_check:
@@ -440,8 +546,8 @@ def main():
                     _log("WARNING: Auth expired — pausing Claude calls")
                     _log("Re-authenticate via SSH: claude auth login")
 
-            # Periodic token keepalive (~every 12 hours)
-            if auth_ok and cycle >= next_keepalive:
+            # Periodic token keepalive (~every 12 hours) — only needed for proactive RP
+            if proactive_rp_enabled and auth_ok and cycle >= next_keepalive:
                 if not auth_keepalive():
                     auth_ok = False
                     _log(
@@ -449,6 +555,28 @@ def main():
                     )
                     _log("Re-authenticate via SSH: claude auth login")
                 next_keepalive = cycle + AUTH_KEEPALIVE_INTERVAL
+
+            # Check persistent trade-completed flag (primary detection path)
+            trade_completed_with = state.get("tradeCompletedWith")
+            if trade_completed_with and hs_active:
+                complete_hide_and_seek_trade(trade_completed_with)
+                hs_active = False  # prevent duplicate processing this cycle
+
+            # Gold-based fallback: detect trade completion via gold change
+            # Aldric pays the reward; the finder may also give gold (tip/gift),
+            # so net change can be less than expected, zero, or even positive.
+            # Any non-zero gold change + known trade partner = completed trade.
+            if hs_active and prev_gold is not None and current_gold is not None:
+                trade_partner = state.get("tradePartnerName")
+                if trade_partner and prev_gold != current_gold:
+                    expected_copper = hs.get("current_reward_copper", hs.get("reward_copper", 0))
+                    gold_change = current_gold - prev_gold
+                    _log(f"H&S gold fallback triggered: gold changed by {gold_change:+d} "
+                         f"(expected -{expected_copper}), partner: {trade_partner}")
+                    complete_hide_and_seek_trade(trade_partner)
+                    hs_active = False
+
+            prev_gold = current_gold
 
             # Extract zone info for prompts
             player = state.get("player", {})
@@ -479,12 +607,12 @@ def main():
 
             if had_messages:
                 # Reset idle/proactive timers — activity just happened
-                next_emote_cycle = cycle + _random_emote_delay()
-                next_proactive_cycle = cycle + _random_proactive_delay()
+                next_emote_cycle = cycle + _random_emote_delay(emote_min_cycles, emote_max_cycles)
+                next_proactive_cycle = cycle + _random_proactive_delay(proactive_min_cycles, proactive_max_cycles)
                 _save_proactive_cycle(next_proactive_cycle)
 
             # Idle emotes when no messages for a while
-            if not had_messages and cycle >= next_emote_cycle:
+            if idle_emotes_enabled and not had_messages and cycle >= next_emote_cycle:
                 # Blend seasonal emotes into the pool
                 emote_pool = list(idle_emotes)
                 season_name = calendar.get_season(datetime.now().date())["name"]
@@ -497,10 +625,10 @@ def main():
                     input_control.send_chat_command(emote)
                 except Exception as e:
                     _log(f"Error sending idle emote: {e}")
-                next_emote_cycle = cycle + _random_emote_delay()
+                next_emote_cycle = cycle + _random_emote_delay(emote_min_cycles, emote_max_cycles)
 
             # Proactive RP when idle for a long time
-            if not had_messages and cycle >= next_proactive_cycle:
+            if proactive_rp_enabled and not had_messages and cycle >= next_proactive_cycle:
                 if auth_ok:
                     _log(f"Proactive RP triggered (cycle {cycle})")
                     ok = invoke_claude_proactive(
@@ -513,14 +641,24 @@ def main():
                         auth_ok = False
                         _log("WARNING: Auth expired — pausing Claude calls")
                         _log("Re-authenticate via SSH: claude auth login")
-                next_emote_cycle = cycle + _random_emote_delay()
-                next_proactive_cycle = cycle + _random_proactive_delay()
+                next_emote_cycle = cycle + _random_emote_delay(emote_min_cycles, emote_max_cycles)
+                next_proactive_cycle = cycle + _random_proactive_delay(proactive_min_cycles, proactive_max_cycles)
                 _save_proactive_cycle(next_proactive_cycle)
 
             # Anti-AFK sit/stand periodically
             if not had_messages and cycle % AFK_SIT_EVERY == 0:
                 _log(f"AFK sit/stand (cycle {cycle})")
                 do_afk_sit()
+
+            # Hide-and-seek trade setup — after processing, before next /reload
+            hs = memory.load_hide_and_seek()
+            if hs.get("active", False):
+                copper = hs.get("current_reward_copper", hs.get("reward_copper", 0))
+                _log(f"H&S trade: SetTradeMoney({copper}), clicking TradeFrameTradeButton")
+                input_control.send_chat_command(f"/script SetTradeMoney({copper})")
+                time.sleep(1)
+                input_control.send_chat_command("/click TradeFrameTradeButton")
+                time.sleep(2)
     except KeyboardInterrupt:
         _log("Interrupted by user (KeyboardInterrupt)")
     except Exception as e:

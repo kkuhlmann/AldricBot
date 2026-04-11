@@ -474,7 +474,8 @@ def test_stranger_no_sentence_limit_in_prompt(handler, make_msg, default_ctx, mo
 
 def test_disposition_injected_when_not_neutral(handler, make_msg, default_ctx, mock_send_chat, mock_claude, seed_guildmate):
     """Non-neutral disposition is injected into the prompt."""
-    seed_guildmate("Fenwick", summary="A warrior.", friendliness=-4.0, last_seen="2026-03-12")
+    seed_guildmate("Fenwick", summary="A warrior.", friendliness=-4.0,
+                   last_seen=datetime.now().strftime("%Y-%m-%d"))
     mock_claude(stdout=json.dumps({"commands": ["/g Hmph."], "memory": None, "friendliness": 0}))
     msg = make_msg("guild", "Fenwick", "Hey Aldric, hello")
     handler.handle(msg, default_ctx)
@@ -785,12 +786,12 @@ def test_custom_character_name_in_prompt(handler, make_msg, mock_send_chat, mock
 
 
 def test_hide_and_seek_status_active(handler, make_msg, default_ctx, mock_send_chat):
-    memory.save_hide_and_seek({"active": True, "finders": [], "reward_gold": 500, "current_reward": 450})
+    memory.save_hide_and_seek({"active": True, "finders": [], "reward_copper": 5000000, "current_reward_copper": 4500000})
     msg = make_msg("guild", "Fenwick", "Hey Aldric, are you hiding")
     result = handler.handle(msg, default_ctx)
     assert result == "ok"
     sent = [str(c) for c in mock_send_chat.call_args_list]
-    assert any("450 gold" in t for t in sent)
+    assert any("450g" in t for t in sent)
 
 
 def test_hide_and_seek_status_inactive(handler, make_msg, default_ctx, mock_send_chat):
@@ -809,7 +810,7 @@ def test_hide_and_seek_status_no_claude(handler, make_msg, default_ctx, mock_sen
 
 def test_hide_and_seek_hints_with_hints(handler, make_msg, default_ctx, mock_send_chat):
     memory.save_hide_and_seek({
-        "active": True, "finders": [], "reward_gold": 500, "current_reward": 450,
+        "active": True, "finders": [], "reward_copper": 5000000, "current_reward_copper": 4500000,
         "hints": ["The earth mourns here...", "Spires of a fallen prince..."],
     })
     msg = make_msg("guild", "Fenwick", "Hey Aldric, what are the hints")
@@ -844,7 +845,7 @@ def test_hide_and_seek_hints_no_claude(handler, make_msg, default_ctx, mock_send
 def test_hide_and_seek_hint_request_generates_hint(handler, make_msg, mock_send_chat, mock_claude):
     """Hint request triggers Claude and sends a guild message."""
     memory.save_hide_and_seek({
-        "active": True, "finders": [], "reward_gold": 500, "current_reward": 500,
+        "active": True, "finders": [], "reward_copper": 5000000, "current_reward_copper": 5000000,
         "hint_count": 0, "hints": [],
     })
     mock_claude(stdout=json.dumps(["/g The earth here still mourns... 500g remains."]))
@@ -874,7 +875,7 @@ def test_hide_and_seek_hint_request_no_active_game(handler, make_msg, default_ct
 def test_hide_and_seek_hint_request_max_hints(handler, make_msg, default_ctx, mock_send_chat, mock_claude):
     """Hint request after 5 hints responds that all hints are given."""
     memory.save_hide_and_seek({
-        "active": True, "finders": [], "reward_gold": 500, "current_reward": 300,
+        "active": True, "finders": [], "reward_copper": 5000000, "current_reward_copper": 3000000,
         "hint_count": 5, "hints": ["h1", "h2", "h3", "h4", "h5"],
     })
     msg = make_msg("guild", "Fenwick", "Hey Aldric, give me a hint")
@@ -888,7 +889,7 @@ def test_hide_and_seek_hint_request_max_hints(handler, make_msg, default_ctx, mo
 def test_hide_and_seek_hint_request_no_zone(handler, make_msg, mock_send_chat, mock_claude):
     """Hint request without zone data responds gracefully."""
     memory.save_hide_and_seek({
-        "active": True, "finders": [], "reward_gold": 500, "current_reward": 500,
+        "active": True, "finders": [], "reward_copper": 5000000, "current_reward_copper": 5000000,
         "hint_count": 0, "hints": [],
     })
     ctx = EventContext(auth_ok=True, admin_name=None, zone="")
@@ -901,7 +902,7 @@ def test_hide_and_seek_hint_request_no_zone(handler, make_msg, mock_send_chat, m
 def test_hide_and_seek_hint_request_auth_down(handler, make_msg, mock_send_chat, mock_claude):
     """Hint request with auth down sends fallback message."""
     memory.save_hide_and_seek({
-        "active": True, "finders": [], "reward_gold": 500, "current_reward": 500,
+        "active": True, "finders": [], "reward_copper": 5000000, "current_reward_copper": 5000000,
         "hint_count": 0, "hints": [],
     })
     ctx = EventContext(auth_ok=False, zone="Elwynn Forest")
@@ -917,9 +918,9 @@ def test_hide_and_seek_winners(handler, make_msg, default_ctx, mock_send_chat):
     memory.save_hide_and_seek({
         "active": False,
         "finders": [
-            {"name": "Fenwick", "found_at": "...", "gold_given": 500},
-            {"name": "Grukk", "found_at": "...", "gold_given": 450},
-            {"name": "Fenwick", "found_at": "...", "gold_given": 400},
+            {"name": "Fenwick", "found_at": "...", "copper_given": 5000000},
+            {"name": "Grukk", "found_at": "...", "copper_given": 4500000},
+            {"name": "Fenwick", "found_at": "...", "copper_given": 4000000},
         ],
     })
     msg = make_msg("guild", "Fenwick", "Hey Aldric, who's won hide and seek")
@@ -949,13 +950,13 @@ def test_admin_start_hide_and_seek(handler, make_msg, mock_send_chat):
     assert result == "ok"
     hs = memory.load_hide_and_seek()
     assert hs["active"] is True
-    assert hs["reward_gold"] == 500
+    assert hs["reward_copper"] == 5000000
     sent = [str(c) for c in mock_send_chat.call_args_list]
-    assert any("500" in t and "gold" in t.lower() for t in sent)
+    assert any("500g" in t for t in sent)
 
 
 def test_admin_start_hide_and_seek_already_active(handler, make_msg, mock_send_chat):
-    memory.save_hide_and_seek({"active": True, "finders": [], "reward_gold": 500, "current_reward": 500})
+    memory.save_hide_and_seek({"active": True, "finders": [], "reward_copper": 5000000, "current_reward_copper": 5000000})
     ctx = EventContext(auth_ok=True, admin_name="AdminGuy")
     msg = make_msg("whisper", "AdminGuy", "Hey Aldric, start hide and seek 300 gold")
     handler.handle(msg, ctx)
@@ -963,11 +964,11 @@ def test_admin_start_hide_and_seek_already_active(handler, make_msg, mock_send_c
     assert any("already" in t.lower() for t in sent)
     # Reward unchanged
     hs = memory.load_hide_and_seek()
-    assert hs["reward_gold"] == 500
+    assert hs["reward_copper"] == 5000000
 
 
 def test_admin_stop_hide_and_seek(handler, make_msg, mock_send_chat):
-    memory.save_hide_and_seek({"active": True, "finders": [], "reward_gold": 500, "current_reward": 500})
+    memory.save_hide_and_seek({"active": True, "finders": [], "reward_copper": 5000000, "current_reward_copper": 5000000})
     ctx = EventContext(auth_ok=True, admin_name="AdminGuy")
     msg = make_msg("whisper", "AdminGuy", "Hey Aldric, stop hide and seek")
     result = handler.handle(msg, ctx)
@@ -986,6 +987,38 @@ def test_admin_stop_hide_and_seek_not_active(handler, make_msg, mock_send_chat):
     assert any("no hunt" in t.lower() for t in sent)
 
 
+def test_hide_and_seek_hint_strips_json_array_suffix(handler, make_msg, mock_send_chat, mock_claude):
+    """Raw text fallback strips trailing '"]' from greedy regex match."""
+    memory.save_hide_and_seek({
+        "active": True, "finders": [], "reward_copper": 5000000, "current_reward_copper": 5000000,
+        "hint_count": 0, "hints": [],
+    })
+    # Simulate Claude returning JSON array with trailing Sources that break parsing
+    raw_output = '["/g The bones of a dragon watch over this place..."]\n\nSources:\n[1] some-url'
+    mock_claude(stdout=raw_output)
+    ctx = EventContext(auth_ok=True, admin_name=None, zone="Dragonblight", sub_zone="Dragon's Fall")
+    msg = make_msg("guild", "Fenwick", "Hey Aldric, give me a hint")
+    handler.handle(msg, ctx)
+    sent = [str(c) for c in mock_send_chat.call_args_list]
+    # The sent message should NOT contain '"]'
+    for t in sent:
+        if "bones" in t.lower():
+            assert '"]' not in t
+
+
+def test_sender_zone_in_prompt_during_hide_and_seek(handler, make_msg, mock_send_chat, mock_claude):
+    """Sender's location should still appear in the prompt even when hide-and-seek is active."""
+    memory.save_hide_and_seek({"active": True, "finders": [], "reward_copper": 5000000, "current_reward_copper": 5000000})
+    mock_claude(stdout=json.dumps({"commands": ["/g Aye."], "memory": None}))
+    ctx = EventContext(auth_ok=True, admin_name=None, zone="Elwynn Forest", sub_zone="Goldshire")
+    msg = make_msg("guild", "Fenwick", "Hey Aldric, where are you?", senderZone="Stormwind City")
+    handler.handle(msg, ctx)
+    prompt = mock_claude.mock.call_args[0][0][-1]
+    assert "The sender is currently in: Stormwind City" in prompt
+    # Aldric's own location should NOT appear
+    assert "Your location:" not in prompt
+
+
 def test_thinking_emote_no_consecutive_repeats(handler, make_msg, default_ctx, mock_send_chat, mock_claude):
     """The same emote should not appear twice in a row."""
     mock_claude(stdout=json.dumps({"commands": ["/g Aye."], "memory": None}))
@@ -1001,3 +1034,53 @@ def test_thinking_emote_no_consecutive_repeats(handler, make_msg, default_ctx, m
     # No two consecutive emotes should be the same
     for i in range(1, len(emotes_sent)):
         assert emotes_sent[i] != emotes_sent[i - 1]
+
+
+# ── Guild invite ─────────────────────────────────────────────
+
+
+def test_guild_invite_whisper(handler, make_msg, default_ctx, mock_send_chat):
+    """Whisper 'invite me' sends /ginvite and an RP response."""
+    msg = make_msg("whisper", "Fenwick", "invite me")
+    result = handler.handle(msg, default_ctx)
+    assert result == "ok"
+    calls = [c[0][0] for c in mock_send_chat.call_args_list]
+    assert calls[0] == "/ginvite Fenwick"
+    assert any("/w Fenwick " in c for c in calls)
+
+
+def test_guild_invite_from_guild_chat(handler, make_msg, default_ctx, mock_send_chat):
+    """Guild chat 'invite me' sends 'already among us', no /ginvite."""
+    msg = make_msg("guild", "Fenwick", "Hey Aldric, invite me")
+    result = handler.handle(msg, default_ctx)
+    assert result == "ok"
+    calls = [c[0][0] for c in mock_send_chat.call_args_list]
+    assert not any("/ginvite" in c for c in calls)
+    assert any("already among us" in c for c in calls)
+
+
+def test_guild_invite_cooldown(handler, make_msg, default_ctx, mock_send_chat):
+    """Second rapid invite request is silently ignored."""
+    msg1 = make_msg("whisper", "Fenwick", "invite me", time=1000.0)
+    handler.handle(msg1, default_ctx)
+    mock_send_chat.reset_mock()
+    msg2 = make_msg("whisper", "Fenwick", "invite me", time=1001.0)
+    handler.handle(msg2, default_ctx)
+    calls = [c[0][0] for c in mock_send_chat.call_args_list]
+    assert not any("/ginvite" in c for c in calls)
+
+
+def test_guild_invite_party(handler, make_msg, default_ctx, mock_send_chat):
+    """Party chat invite works like whisper."""
+    msg = make_msg("party", "Fenwick", "Hey Aldric, invite me")
+    result = handler.handle(msg, default_ctx)
+    assert result == "ok"
+    calls = [c[0][0] for c in mock_send_chat.call_args_list]
+    assert calls[0] == "/ginvite Fenwick"
+
+
+def test_guild_invite_no_claude(handler, make_msg, default_ctx, mock_send_chat, mock_claude):
+    """Guild invite does not invoke Claude."""
+    msg = make_msg("whisper", "Fenwick", "invite me")
+    handler.handle(msg, default_ctx)
+    mock_claude.mock.assert_not_called()

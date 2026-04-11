@@ -403,8 +403,8 @@ def test_set_hide_and_seek_active(monkeypatch):
     result = memory.set_hide_and_seek_active(True, "AdminGuy", 500)
     assert result["active"] is True
     assert result["activated_by"] == "AdminGuy"
-    assert result["reward_gold"] == 500
-    assert result["current_reward"] == 500
+    assert result["reward_copper"] == 5000000
+    assert result["current_reward_copper"] == 5000000
     assert result["hint_count"] == 0
     assert result["hints"] == []
 
@@ -414,7 +414,7 @@ def test_set_hide_and_seek_active_preserves_finders(monkeypatch):
     # Record a finder first
     memory.save_hide_and_seek({
         "active": False,
-        "finders": [{"name": "Fenwick", "found_at": "2026-03-13T14:00:00", "gold_given": 400}],
+        "finders": [{"name": "Fenwick", "found_at": "2026-03-13T14:00:00", "copper_given": 4000000}],
     })
     result = memory.set_hide_and_seek_active(True, "AdminGuy", 500)
     assert len(result["finders"]) == 1
@@ -425,44 +425,44 @@ def test_set_hide_and_seek_active_resets_hints(monkeypatch):
     monkeypatch.setattr("aldricbot.input_control.send_chat_command", lambda cmd: None)
     memory.save_hide_and_seek({
         "active": True, "finders": [], "hints": ["old hint"],
-        "hint_count": 3, "reward_gold": 500, "current_reward": 400,
+        "hint_count": 3, "reward_copper": 5000000, "current_reward_copper": 4000000,
     })
     result = memory.set_hide_and_seek_active(True, "AdminGuy", 600)
     assert result["hints"] == []
     assert result["hint_count"] == 0
-    assert result["reward_gold"] == 600
+    assert result["reward_copper"] == 6000000
 
 
 def test_record_finder():
-    memory.save_hide_and_seek({"active": True, "finders": [], "reward_gold": 500, "current_reward": 450})
-    result = memory.record_finder("Fenwick", 450)
+    memory.save_hide_and_seek({"active": True, "finders": [], "reward_copper": 5000000, "current_reward_copper": 4500000})
+    result = memory.record_finder("Fenwick", 4500000)
     assert result["active"] is False
     assert len(result["finders"]) == 1
     assert result["finders"][0]["name"] == "Fenwick"
-    assert result["finders"][0]["gold_given"] == 450
+    assert result["finders"][0]["copper_given"] == 4500000
 
 
 def test_increment_hint_count_first_hint(monkeypatch):
     """First hint — no decay."""
     sent = []
     monkeypatch.setattr("aldricbot.input_control.send_chat_command", lambda cmd: sent.append(cmd))
-    memory.save_hide_and_seek({"active": True, "finders": [], "hint_count": 0, "reward_gold": 500, "current_reward": 500, "hints": []})
+    memory.save_hide_and_seek({"active": True, "finders": [], "hint_count": 0, "reward_copper": 5000000, "current_reward_copper": 5000000, "hints": []})
     count = memory.increment_hint_count()
     assert count == 1
     data = memory.load_hide_and_seek()
-    assert data["current_reward"] == 500  # no decay on first hint
-    assert "5000000" in sent[-1]  # 500 * 10000
+    assert data["current_reward_copper"] == 5000000  # no decay on first hint
+    assert "5000000" in sent[-1]
 
 
 def test_increment_hint_count_decay(monkeypatch):
     """Hints 2-5 decay by 20% of original each."""
     sent = []
     monkeypatch.setattr("aldricbot.input_control.send_chat_command", lambda cmd: sent.append(cmd))
-    memory.save_hide_and_seek({"active": True, "finders": [], "hint_count": 1, "reward_gold": 500, "current_reward": 500, "hints": []})
+    memory.save_hide_and_seek({"active": True, "finders": [], "hint_count": 1, "reward_copper": 5000000, "current_reward_copper": 5000000, "hints": []})
     count = memory.increment_hint_count()
     assert count == 2
     data = memory.load_hide_and_seek()
-    assert data["current_reward"] == 400  # 500 - (2-1)*100 = 400
+    assert data["current_reward_copper"] == 4000000  # 5000000 - (2-1)*1000000 = 4000000
     assert "4000000" in sent[-1]
 
 
@@ -470,11 +470,11 @@ def test_increment_hint_count_decay_at_5(monkeypatch):
     """Hint 5 — 80% total decay."""
     sent = []
     monkeypatch.setattr("aldricbot.input_control.send_chat_command", lambda cmd: sent.append(cmd))
-    memory.save_hide_and_seek({"active": True, "finders": [], "hint_count": 4, "reward_gold": 500, "current_reward": 200, "hints": []})
+    memory.save_hide_and_seek({"active": True, "finders": [], "hint_count": 4, "reward_copper": 5000000, "current_reward_copper": 2000000, "hints": []})
     count = memory.increment_hint_count()
     assert count == 5
     data = memory.load_hide_and_seek()
-    assert data["current_reward"] == 100  # 500 - (5-1)*100 = 100
+    assert data["current_reward_copper"] == 1000000  # 5000000 - (5-1)*1000000 = 1000000
     assert "1000000" in sent[-1]
 
 
@@ -492,29 +492,29 @@ def test_get_hints_empty():
     assert memory.get_hints() == []
 
 
-def test_get_current_reward():
-    memory.save_hide_and_seek({"active": True, "finders": [], "reward_gold": 500, "current_reward": 400})
-    assert memory.get_current_reward() == 400
+def test_get_current_reward_copper():
+    memory.save_hide_and_seek({"active": True, "finders": [], "reward_copper": 5000000, "current_reward_copper": 4000000})
+    assert memory.get_current_reward_copper() == 4000000
 
 
-def test_get_current_reward_default():
-    assert memory.get_current_reward() == 0
+def test_get_current_reward_copper_default():
+    assert memory.get_current_reward_copper() == 0
 
 
 def test_get_winner_stats():
     memory.save_hide_and_seek({
         "active": False,
         "finders": [
-            {"name": "Fenwick", "found_at": "...", "gold_given": 500},
-            {"name": "Grukk", "found_at": "...", "gold_given": 450},
-            {"name": "Fenwick", "found_at": "...", "gold_given": 400},
+            {"name": "Fenwick", "found_at": "...", "copper_given": 5000000},
+            {"name": "Grukk", "found_at": "...", "copper_given": 4500000},
+            {"name": "Fenwick", "found_at": "...", "copper_given": 4000000},
         ],
     })
     stats = memory.get_winner_stats()
     assert len(stats) == 2
     assert stats[0]["name"] == "Fenwick"
     assert stats[0]["wins"] == 2
-    assert stats[0]["total_gold"] == 900
+    assert stats[0]["total_copper"] == 9000000
     assert stats[1]["name"] == "Grukk"
     assert stats[1]["wins"] == 1
 

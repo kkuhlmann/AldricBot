@@ -93,6 +93,17 @@ Movement uses keyboard simulation (not SavedVariables), so it works independentl
 - `turn_left(duration)` / `turn_right(duration)` - turn (~0.45s = 90 degrees)
 - `jump()` - jump
 
+## Development
+
+Run tests with the project virtualenv:
+```
+.venv/bin/python -m pytest tests/ -v
+```
+
+## Trade Architecture
+
+`SetTradeMoney()` and `/click TradeFrameTradeButton` must be sent from the daemon via `/script` chat commands — not from the Lua addon. WoW protected functions don't work reliably from addon context. See commit 40256f2.
+
 ## Maintenance
 
 After any change to commands, flags, project structure, or user-facing behavior, check that `README.md` is still accurate and update it if needed. The README is the primary user-facing documentation.

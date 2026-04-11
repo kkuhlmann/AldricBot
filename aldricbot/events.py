@@ -183,12 +183,40 @@ def _parse_json_response(text: str) -> dict | list | None:
             return parsed
     except (json.JSONDecodeError, TypeError):
         pass
+    # Fallback: extract JSON embedded in prose (e.g. when Claude uses WebSearch)
+    for start_char, end_char in [("[", "]"), ("{", "}")]:
+        start = text.find(start_char)
+        if start == -1:
+            continue
+        end = text.rfind(end_char)
+        if end <= start:
+            continue
+        try:
+            parsed = json.loads(text[start:end + 1])
+            if isinstance(parsed, dict) and "commands" in parsed:
+                return parsed
+            if isinstance(parsed, list) and all(isinstance(s, str) for s in parsed):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
     return None
+
+
+_UNICODE_REPLACEMENTS = {
+    "\u2014": "--",   # em-dash
+    "\u2013": "-",    # en-dash
+    "\u201c": '"',    # left double curly quote
+    "\u201d": '"',    # right double curly quote
+    "\u2018": "'",    # left single curly quote
+    "\u2019": "'",    # right single curly quote
+    "\u2026": "...",  # ellipsis
+}
 
 
 def _send_commands(commands: list[str]) -> None:
     """Validate and send chat commands to WoW."""
-    commands = [cmd.replace("\u2014", " ") for cmd in commands]
+    for old, new in _UNICODE_REPLACEMENTS.items():
+        commands = [cmd.replace(old, new) for cmd in commands]
     commands = input_control.validate_and_fix_chunks(commands)
     for cmd in commands:
         input_control.send_chat_command(cmd)

@@ -356,27 +356,46 @@ def save_hide_and_seek(data: dict) -> None:
     _atomic_write(HIDE_AND_SEEK_FILE, data)
 
 
+def format_money(copper: int) -> str:
+    """Format a copper amount as a human-readable WoW money string.
+
+    Examples: 50000 → "5g", 10050 → "1g 50c", 5000 → "50s", 150 → "1s 50c"
+    """
+    gold = copper // 10000
+    silver = (copper % 10000) // 100
+    rem_copper = copper % 100
+    parts = []
+    if gold:
+        parts.append(f"{gold}g")
+    if silver:
+        parts.append(f"{silver}s")
+    if rem_copper or not parts:
+        parts.append(f"{rem_copper}c")
+    return " ".join(parts)
+
+
 def set_hide_and_seek_active(active: bool, activated_by: str, reward_gold: int = 0) -> dict:
     """Activate or deactivate hide and seek. Preserves finders across games."""
     data = load_hide_and_seek()
     data["active"] = active
     data["activated_by"] = activated_by
     data["activated_at"] = datetime.now().isoformat()
-    data["reward_gold"] = reward_gold
-    data["current_reward"] = reward_gold
+    copper = reward_gold * 10000
+    data["reward_copper"] = copper
+    data["current_reward_copper"] = copper
     data["hint_count"] = 0
     data["hints"] = []
     save_hide_and_seek(data)
     return data
 
 
-def record_finder(name: str, gold_given: int) -> dict:
+def record_finder(name: str, copper_given: int) -> dict:
     """Record a finder and deactivate the game."""
     data = load_hide_and_seek()
     data["finders"].append({
         "name": name,
         "found_at": datetime.now().isoformat(),
-        "gold_given": gold_given,
+        "copper_given": copper_given,
     })
     data["active"] = False
     save_hide_and_seek(data)
@@ -390,21 +409,21 @@ def increment_hint_count() -> int:
     data = load_hide_and_seek()
     data["hint_count"] = data.get("hint_count", 0) + 1
     hint_count = data["hint_count"]
-    reward_gold = data.get("reward_gold", 0)
+    reward_copper = data.get("reward_copper", 0)
 
     # No decay on first hint; 20% of original per hint after that
     if hint_count >= 2:
-        decay = (hint_count - 1) * (reward_gold * 20 // 100)
-        data["current_reward"] = max(0, reward_gold - decay)
+        decay = (hint_count - 1) * reward_copper * 20 // 100
+        data["current_reward_copper"] = max(0, reward_copper - decay)
     else:
-        data["current_reward"] = reward_gold
+        data["current_reward_copper"] = reward_copper
 
     save_hide_and_seek(data)
 
     # Sync addon copper
-    new_reward = data["current_reward"]
+    new_copper = data["current_reward_copper"]
     input_control.send_chat_command(
-        f"/script AldricBotAddonDB.hideAndSeekRewardCopper = {new_reward * 10000}"
+        f"/script AldricBotAddonDB.hideAndSeekRewardCopper = {new_copper}"
     )
     return hint_count
 
@@ -416,10 +435,10 @@ def store_hint(hint_text: str) -> None:
     save_hide_and_seek(data)
 
 
-def get_current_reward() -> int:
-    """Return the current reward gold amount."""
+def get_current_reward_copper() -> int:
+    """Return the current (possibly decayed) reward in copper."""
     data = load_hide_and_seek()
-    return data.get("current_reward", data.get("reward_gold", 0))
+    return data.get("current_reward_copper", data.get("reward_copper", 0))
 
 
 def get_hints() -> list[str]:
@@ -429,13 +448,13 @@ def get_hints() -> list[str]:
 
 
 def get_winner_stats() -> list[dict]:
-    """Aggregate finders into [{name, wins, total_gold}] sorted by wins desc."""
+    """Aggregate finders into [{name, wins, total_copper}] sorted by wins desc."""
     data = load_hide_and_seek()
     stats: dict[str, dict] = {}
     for finder in data.get("finders", []):
         name = finder["name"]
         if name not in stats:
-            stats[name] = {"name": name, "wins": 0, "total_gold": 0}
+            stats[name] = {"name": name, "wins": 0, "total_copper": 0}
         stats[name]["wins"] += 1
-        stats[name]["total_gold"] += finder.get("gold_given", 0)
+        stats[name]["total_copper"] += finder.get("copper_given", finder.get("gold_given", 0) * 10000)
     return sorted(stats.values(), key=lambda x: x["wins"], reverse=True)
