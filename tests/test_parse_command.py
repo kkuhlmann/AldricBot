@@ -212,3 +212,26 @@ def test_hide_and_seek_commands(msg_text, msg_type, expected):
 def test_start_hide_and_seek_without_amount_returns_none():
     """'start hide and seek' without gold amount does NOT match."""
     assert _parse_command("Admin: Hey Aldric, start hide and seek", "whisper") is None
+
+
+# ── Guild invite commands ─────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "msg_text, msg_type, expected",
+    [
+        ("Fenwick: Hey Aldric, invite me", "guild", ("guild_invite", "")),
+        ("Fenwick: invite me", "whisper", ("guild_invite", "")),
+        ("Fenwick: inv me", "whisper", ("guild_invite", "")),
+        ("Fenwick: Hey Aldric, can i join your guild", "party", ("guild_invite", "")),
+        ("Fenwick: Hey Aldric, can i join the guild", "raid", ("guild_invite", "")),
+        ("Fenwick: i want to join your guild", "whisper", ("guild_invite", "")),
+        ("Fenwick: i want to join the guild", "whisper", ("guild_invite", "")),
+        ("Fenwick: guild invite", "whisper", ("guild_invite", "")),
+        ("Fenwick: can i get an invite", "whisper", ("guild_invite", "")),
+        ("Fenwick: can i get a guild invite", "whisper", ("guild_invite", "")),
+        ("Fenwick: can i have an invite", "whisper", ("guild_invite", "")),
+    ],
+)
+def test_guild_invite_commands(msg_text, msg_type, expected):
+    assert _parse_command(msg_text, msg_type) == expected

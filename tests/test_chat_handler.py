@@ -1034,3 +1034,53 @@ def test_thinking_emote_no_consecutive_repeats(handler, make_msg, default_ctx, m
     # No two consecutive emotes should be the same
     for i in range(1, len(emotes_sent)):
         assert emotes_sent[i] != emotes_sent[i - 1]
+
+
+# ── Guild invite ─────────────────────────────────────────────
+
+
+def test_guild_invite_whisper(handler, make_msg, default_ctx, mock_send_chat):
+    """Whisper 'invite me' sends /ginvite and an RP response."""
+    msg = make_msg("whisper", "Fenwick", "invite me")
+    result = handler.handle(msg, default_ctx)
+    assert result == "ok"
+    calls = [c[0][0] for c in mock_send_chat.call_args_list]
+    assert calls[0] == "/ginvite Fenwick"
+    assert any("/w Fenwick " in c for c in calls)
+
+
+def test_guild_invite_from_guild_chat(handler, make_msg, default_ctx, mock_send_chat):
+    """Guild chat 'invite me' sends 'already among us', no /ginvite."""
+    msg = make_msg("guild", "Fenwick", "Hey Aldric, invite me")
+    result = handler.handle(msg, default_ctx)
+    assert result == "ok"
+    calls = [c[0][0] for c in mock_send_chat.call_args_list]
+    assert not any("/ginvite" in c for c in calls)
+    assert any("already among us" in c for c in calls)
+
+
+def test_guild_invite_cooldown(handler, make_msg, default_ctx, mock_send_chat):
+    """Second rapid invite request is silently ignored."""
+    msg1 = make_msg("whisper", "Fenwick", "invite me", time=1000.0)
+    handler.handle(msg1, default_ctx)
+    mock_send_chat.reset_mock()
+    msg2 = make_msg("whisper", "Fenwick", "invite me", time=1001.0)
+    handler.handle(msg2, default_ctx)
+    calls = [c[0][0] for c in mock_send_chat.call_args_list]
+    assert not any("/ginvite" in c for c in calls)
+
+
+def test_guild_invite_party(handler, make_msg, default_ctx, mock_send_chat):
+    """Party chat invite works like whisper."""
+    msg = make_msg("party", "Fenwick", "Hey Aldric, invite me")
+    result = handler.handle(msg, default_ctx)
+    assert result == "ok"
+    calls = [c[0][0] for c in mock_send_chat.call_args_list]
+    assert calls[0] == "/ginvite Fenwick"
+
+
+def test_guild_invite_no_claude(handler, make_msg, default_ctx, mock_send_chat, mock_claude):
+    """Guild invite does not invoke Claude."""
+    msg = make_msg("whisper", "Fenwick", "invite me")
+    handler.handle(msg, default_ctx)
+    mock_claude.mock.assert_not_called()

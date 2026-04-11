@@ -82,6 +82,7 @@ The "Hey Aldric" prefix is required for guild, party, and raid chat. For whisper
 | `Hey Aldric, give me a hint`             | Requests a hide and seek hint (up to 5 per game)                           |
 | `Hey Aldric, what are the hints?`        | Shows all hide and seek hints given so far                                 |
 | `Hey Aldric, who's won hide and seek?`   | Shows the hide and seek leaderboard                                        |
+| `Hey Aldric, invite me`                  | Sends you a guild invitation (works from whisper, party, or raid)          |
 | `Hey Aldric, help`                       | Lists available commands                                                   |
 
 ### Admin Only (Whisper)

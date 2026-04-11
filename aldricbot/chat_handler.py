@@ -12,6 +12,7 @@ import re
 
 from aldricbot import input_control, memory, persona as persona_mod
 from aldricbot.events import (
+    CooldownTracker,
     EventContext,
     EventHandler,
     _is_auth_error,
@@ -164,6 +165,14 @@ def _parse_command(msg_text: str, msg_type: str = "whisper", character_name: str
     if re.match(r"(?:stop|end|cancel)\s+hide\s+and\s+seek", remainder_lower):
         return ("stop_hide_and_seek", "")
 
+    # Guild invite request
+    if re.match(
+        r"(?:invite me|inv me|can i (?:get an? |have an? )?(?:guild )?invit"
+        r"|can i join (?:your|the) guild|i want to join (?:your|the) guild|guild invite)",
+        remainder_lower,
+    ):
+        return ("guild_invite", "")
+
     return None
 
 
@@ -175,6 +184,14 @@ THINKING_EMOTES = [
     "/e flips through his journal, searching for the right words.",
     "/e narrows his eyes, recalling something from long ago.",
     "/e rubs the stumps of his missing fingers absently.",
+]
+
+GUILD_INVITE_RESPONSES = [
+    "Welcome to the fold, friend. The invitation is sent — may the Light guide your path among us.",
+    "Aye, you are welcome here. The invitation is sent.",
+    "A new soul for the chronicle. I have extended the guild's hand to you.",
+    "Consider it done. The guild could use another able soul.",
+    "The invitation is yours. Join us, and write your own chapter.",
 ]
 
 AUTH_DOWN_RESPONSES = [
@@ -199,6 +216,7 @@ class ChatHandler(EventHandler):
     def __init__(self):
         self._last_emote: str | None = None
         self._retry_queue: collections.deque = collections.deque(maxlen=5)
+        self._invite_cooldown = CooldownTracker(60)
 
     def process_retries(self, ctx: EventContext) -> str:
         """Attempt one queued message. Returns 'ok', 'auth_error', or 'empty'."""
@@ -228,6 +246,20 @@ class ChatHandler(EventHandler):
         emote = random.choice(choices)
         self._last_emote = emote
         input_control.send_chat_command(emote)
+
+    def _handle_guild_invite(self, sender: str, msg_type: str, ctx: EventContext) -> str:
+        """Send a /ginvite and an in-character acknowledgement."""
+        if msg_type == "guild":
+            _send_response(msg_type, sender, "You are already among us, friend.")
+            return "ok"
+        if self._invite_cooldown.is_on_cooldown(sender):
+            return "ok"
+        input_control.send_chat_command(f"/ginvite {sender}")
+        pool = persona_mod.get_guild_invite_responses(ctx.persona) or GUILD_INVITE_RESPONSES
+        _send_response(msg_type, sender, random.choice(pool))
+        self._invite_cooldown.record(sender)
+        _log(f"Sent guild invite to {sender}")
+        return "ok"
 
     def handle(self, msg: dict, ctx: EventContext, _is_retry: bool = False) -> str:
         """Process a chat message. Returns 'ok', 'auth_error', or 'transient_failure'."""
@@ -268,6 +300,8 @@ class ChatHandler(EventHandler):
             if action == "hide_and_seek_winners":
                 self._handle_hide_and_seek_winners(sender, msg_type)
                 return "ok"
+            if action == "guild_invite":
+                return self._handle_guild_invite(sender, msg_type, ctx)
             # Self-forget — available from any channel
             if action == "forget_self":
                 self._handle_self_forget(sender, msg_type)
@@ -578,6 +612,7 @@ class ChatHandler(EventHandler):
             sender,
             '"Tell me the world facts" — I will recite the facts I have been told.',
         )
+        _send_response(msg_type, sender, '"Invite me" — I will send you a guild invitation.')
         _send_response(msg_type, sender, '"Are you hiding?" — check if a hide and seek game is active.')
         _send_response(msg_type, sender, '"What are the hints?" — see all hints given so far.')
         _send_response(msg_type, sender, '"Who\'s won hide and seek?" — see the leaderboard.')
