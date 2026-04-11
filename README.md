@@ -265,6 +265,10 @@ Optional flags:
 | `--admin NAME`                | `ALDRICBOT_ADMIN`       | _(none)_ | Character name that can use admin commands              |
 | `--character NAME`            | `ALDRICBOT_CHARACTER`   | `Aldric` | Character name for greeting prefix and memory isolation |
 | `--persona PATH`              | `ALDRICBOT_PERSONA`     | _(none)_ | Path to persona YAML file                               |
+| `--idle-emotes / --no-idle-emotes` | `ALDRICBOT_IDLE_EMOTES` | enabled | Enable/disable idle emotes                         |
+| `--proactive-rp / --no-proactive-rp` | `ALDRICBOT_PROACTIVE_RP` | enabled | Enable/disable proactive RP messages            |
+| `--emote-cadence MIN-MAX`     | `ALDRICBOT_EMOTE_CADENCE` | `8-12` | Idle emote cadence in minutes                          |
+| `--proactive-cadence MIN-MAX` | `ALDRICBOT_PROACTIVE_CADENCE` | `120-240` | Proactive RP cadence in minutes                  |
 
 ### Stop
 
