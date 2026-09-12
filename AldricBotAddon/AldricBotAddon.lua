@@ -361,7 +361,7 @@ initFrame:SetScript("OnEvent", function(self, event, arg1)
             local now = GetTime()
             local fresh = {}
             for _, msg in ipairs(AldricBotAddonDB.messageHistory) do
-                if now - msg.time < 60 then
+                if msg.time <= now and now - msg.time < 60 then
                     table.insert(fresh, msg)
                 end
             end

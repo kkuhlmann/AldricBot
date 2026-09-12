@@ -532,6 +532,16 @@ class EventDispatcher:
         auth_ok = ctx.auth_ok
         had_messages = False
 
+        # Detect WoW client restart: GetTime() resets to 0, so new
+        # timestamps will be lower than stored values from the previous session
+        state_time = state.get("timestamp", 0)
+        if state_time > 0 and (state_time < self._chat_last_time or state_time < self._event_last_time):
+            _log(f"Timestamp regression detected (state={state_time:.1f}, "
+                 f"chat={self._chat_last_time:.1f}, event={self._event_last_time:.1f}) "
+                 "— WoW client restarted, resetting timestamps")
+            self._save_chat_time(0.0)
+            self._save_event_time(0.0)
+
         # Process one retry from ChatHandler before new messages
         for handler in self._handlers:
             if hasattr(handler, "process_retries") and handler._retry_queue:
@@ -544,6 +554,11 @@ class EventDispatcher:
         for msg in state.get("chatMessages", []):
             msg_type = msg.get("type")
             msg_time = msg.get("time", 0)
+
+            # Skip stale messages from a previous WoW session — their
+            # GetTime() timestamps are higher than the current session's uptime
+            if state_time > 0 and msg_time > state_time:
+                continue
 
             # Determine which timestamp to compare against
             if msg_type in self._chat_types:
