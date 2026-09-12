@@ -555,6 +555,11 @@ class EventDispatcher:
             msg_type = msg.get("type")
             msg_time = msg.get("time", 0)
 
+            # Skip stale messages from a previous WoW session — their
+            # GetTime() timestamps are higher than the current session's uptime
+            if state_time > 0 and msg_time > state_time:
+                continue
+
             # Determine which timestamp to compare against
             if msg_type in self._chat_types:
                 if msg_time <= self._chat_last_time:
